@@ -3,6 +3,6 @@ numpy
 opencv-contrib-python
 Pillow
 joblib
-gunicorn
+
 
 
