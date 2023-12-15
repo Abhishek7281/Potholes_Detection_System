@@ -1,5 +1,6 @@
 streamlit
 streamlit-webrtc==0.34.2
+uvicorn
 numpy
 opencv-python-headless==4.5.1.48
 Pillow
