@@ -8,7 +8,7 @@ import tempfile
 
 def load_model():
     # Load the saved model using joblib
-    model_data = joblib.load("pothole_detection_model1.pkl")
+    # model_data = joblib.load("pothole_detection_model1.pkl")
 
     # Load the network weights and configuration separately
     net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
