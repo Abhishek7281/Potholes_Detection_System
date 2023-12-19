@@ -11,10 +11,10 @@ def load_model():
     model_data = joblib.load("pothole_detection_model1.pkl")
 
     # Load the network weights and configuration separately
-    net = cv2.dnn.readNet(model_data["weights"], model_data["config"])
-    classes = model_data["classes"]
-    conf_threshold = model_data["confThreshold"]
-    nms_threshold = model_data["nmsThreshold"]
+    net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
+    classes ="classes"
+    conf_threshold = 0.6
+    nms_threshold = 0.4
 
     # Create and return the detection model
     model = cv2.dnn_DetectionModel(net)
