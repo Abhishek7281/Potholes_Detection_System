@@ -1,7 +1,7 @@
 streamlit
 streamlit-webrtc==0.34.2
 gunicorn
-numpy
+numpy<2.0
 opencv-python-headless==4.5.1.48
 Pillow
 joblib
