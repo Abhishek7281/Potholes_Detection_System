@@ -13,8 +13,10 @@ def load_model():
     # Load the network weights and configuration separately
     net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
     classes ="classes"
-    conf_threshold = 0.6
-    nms_threshold = 0.4
+    conf_threshold = 0.25
+    # 0.6
+    nms_threshold = 0.15
+    # 0.4
 
     # Create and return the detection model
     model = cv2.dnn_DetectionModel(net)
