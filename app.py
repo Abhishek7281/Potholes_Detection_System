@@ -462,9 +462,9 @@ def main():
             
             col1, col2 = st.columns(2)
             with col1:
-                st.image(image, caption='Original Image', width=400)  # Set width
+                st.image(image, caption='Original Image', width=525)  # Set width
             with col2:
-                st.image(detected_pil, caption='Detected Potholes', width=400)  # Set width
+                st.image(detected_pil, caption='Detected Potholes', width=525)  # Set width
             
             temp_image_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
             detected_pil.save(temp_image_path)
