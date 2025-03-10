@@ -295,6 +295,97 @@
 # if __name__ == "__main__":
 #     main()
 
+# import streamlit as st
+# import cv2
+# import numpy as np
+# from PIL import Image
+# import tempfile
+# import os
+
+# def load_model():
+#     net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
+#     conf_threshold = 0.25
+#     nms_threshold = 0.15
+#     model = cv2.dnn_DetectionModel(net)
+#     model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
+#     return model, conf_threshold, nms_threshold
+
+# def detect_potholes(img, model, conf_threshold, nms_threshold):
+#     class_ids, scores, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+#     for (class_id, score, box) in zip(class_ids, scores, boxes):
+#         cv2.rectangle(img, (box[0], box[1]), (box[0] + box[2], box[1] + box[3]), (0, 255, 0), 2)
+#     return img
+
+# def main():
+#     st.set_page_config(page_title="Pothole Detection", layout="wide")
+#     st.title("🛣️ Pothole Detection System")
+
+#     model, conf_threshold, nms_threshold = load_model()
+
+#     uploaded_file = st.file_uploader("Choose an image or video...", type=["jpg", "png", "jpeg", "mp4"])
+    
+#     if uploaded_file is not None:
+#         is_video = uploaded_file.type.startswith('video/')
+        
+#         if is_video:
+#             temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+#             temp_video.write(uploaded_file.read())
+#             temp_video_path = temp_video.name
+            
+#             video = cv2.VideoCapture(temp_video_path)
+#             output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
+#             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+#             fps = int(video.get(cv2.CAP_PROP_FPS))
+#             frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+#             frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#             out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+            
+#             progress_bar = st.progress(0)
+#             total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+#             frame_count = 0
+            
+#             while True:
+#                 ret, frame = video.read()
+#                 if not ret:
+#                     break
+#                 detected_frame = detect_potholes(frame, model, conf_threshold, nms_threshold)
+#                 out.write(detected_frame)
+#                 frame_count += 1
+#                 progress_bar.progress(min(frame_count / total_frames, 1.0))
+            
+#             video.release()
+#             out.release()
+#             st.video(output_video_path)
+            
+#             with open(output_video_path, "rb") as file:
+#                 st.download_button("Download Processed Video", file, file_name="processed_video.mp4", mime="video/mp4")
+            
+#             os.remove(temp_video_path)
+#             os.remove(output_video_path)
+        
+#         else:
+#             image = Image.open(uploaded_file)
+#             img_array = np.array(image)
+#             detected_img = detect_potholes(img_array, model, conf_threshold, nms_threshold)
+#             detected_pil = Image.fromarray(detected_img)
+            
+#             col1, col2 = st.columns(2)
+#             with col1:
+#                 st.image(image, caption='Original Image', use_container_width=True)
+#             with col2:
+#                 st.image(detected_pil, caption='Detected Potholes', use_container_width=True)
+            
+#             temp_image_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+#             detected_pil.save(temp_image_path)
+            
+#             with open(temp_image_path, "rb") as file:
+#                 st.download_button("Download Processed Image", file, file_name="processed_image.png", mime="image/png")
+            
+#             os.remove(temp_image_path)
+
+# if __name__ == "__main__":
+#     main()
+
 import streamlit as st
 import cv2
 import numpy as np
@@ -371,9 +462,9 @@ def main():
             
             col1, col2 = st.columns(2)
             with col1:
-                st.image(image, caption='Original Image', use_container_width=True)
+                st.image(image, caption='Original Image', width=400)  # Set width
             with col2:
-                st.image(detected_pil, caption='Detected Potholes', use_container_width=True)
+                st.image(detected_pil, caption='Detected Potholes', width=400)  # Set width
             
             temp_image_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
             detected_pil.save(temp_image_path)
@@ -385,4 +476,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
