@@ -227,7 +227,7 @@ def main():
     model, conf_threshold, nms_threshold = load_model()
     
     if nav_option == "Home":
-        st.markdown("""<h2 style='text-align: center;'>Welcome to the Pothole Detection System! 🛣️</h2>""", unsafe_allow_html=True)
+        st.markdown("""<h2 style='text-align: left;'>Welcome to the Pothole Detection System! 🛣️</h2>""", unsafe_allow_html=True)
         st.image("https://upload.wikimedia.org/wikipedia/commons/3/35/Pothole.jpg", width=700)
         st.write("This tool helps in detecting potholes in images and videos using Deep Learning.")
     
