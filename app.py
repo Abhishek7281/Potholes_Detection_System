@@ -288,7 +288,7 @@ def main():
                 os.remove(temp_image_path)
     
     elif nav_option == "About":
-        st.markdown("""<h2 style='text-align: center;'>About This Project</h2>""", unsafe_allow_html=True)
+        st.markdown("""<h2 style='text-align: left;'>About This Project</h2>""", unsafe_allow_html=True)
         st.write("This project uses deep learning to detect potholes in images and videos. It aims to assist road maintenance authorities in identifying and addressing road damages efficiently.")
         st.write("🔹 Uses YOLO for object detection\n🔹 Processes images and videos in real-time\n🔹 Provides downloadable results")
 
