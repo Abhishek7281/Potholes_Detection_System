@@ -590,12 +590,44 @@ def load_model():
     return model, conf_threshold, nms_threshold
 
 # ✅ Pothole Detection Function (Now Includes Confidence Score)
+# def detect_potholes(img, model, conf_threshold, nms_threshold):
+#     class_ids, scores, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+
+#     for (class_id, score, box) in zip(class_ids, scores, boxes):
+#         x, y, w, h = box
+#         confidence = float(score)  # Convert score to float
+
+#         # ✅ Bounding Box Color: Green
+#         bbox_color = (0, 255, 0)  
+#         thickness = 3  # Make bounding box thicker
+
+#         # ✅ Draw Bounding Box
+#         cv2.rectangle(img, (x, y), (x + w, y + h), bbox_color, thickness)
+
+#         # ✅ Display Confidence Score
+#         label = f"{confidence:.2f}"  # Format to 2 decimal places
+#         font_scale = 1
+#         font_thickness = 2
+#         text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+
+#         # ✅ Create Background for Text
+#         text_x, text_y = x, y - 10
+#         cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
+        
+#         # ✅ Put Text on Image
+#         cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)  # Black text
+    
+#     return img
+
 def detect_potholes(img, model, conf_threshold, nms_threshold):
+    """
+    Detect potholes and display confidence scores with green bounding boxes.
+    """
     class_ids, scores, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
 
-    for (class_id, score, box) in zip(class_ids, scores, boxes):
-        x, y, w, h = box
-        confidence = float(score)  # Convert score to float
+    for (class_id, score, box) in zip(class_ids.flatten(), scores.flatten(), boxes):
+        x, y, w, h = box.astype(int)
+        confidence = float(score)  # Ensure confidence is a float
 
         # ✅ Bounding Box Color: Green
         bbox_color = (0, 255, 0)  
@@ -605,19 +637,22 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
         cv2.rectangle(img, (x, y), (x + w, y + h), bbox_color, thickness)
 
         # ✅ Display Confidence Score
-        label = f"{confidence:.2f}"  # Format to 2 decimal places
+        label = f"{confidence:.2f}"  # Format confidence to 2 decimal places
         font_scale = 1
         font_thickness = 2
         text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
 
         # ✅ Create Background for Text
-        text_x, text_y = x, y - 10
-        cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
-        
+        text_x, text_y = x, max(y - 10, 20)  # Ensure text is within bounds
+        cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), 
+                      (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
+
         # ✅ Put Text on Image
-        cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)  # Black text
+        cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, 
+                    font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)  # Black text
     
     return img
+
 
 # ✅ Streamlit UI
 def main():
