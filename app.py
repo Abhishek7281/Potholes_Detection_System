@@ -573,12 +573,172 @@
 # if __name__ == "__main__":
 #     main()
 
+# import streamlit as st
+# import cv2
+# import numpy as np
+# from PIL import Image
+# import tempfile
+# import os
+
+# # ✅ Load YOLO Model
+# def load_model():
+#     net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
+#     conf_threshold = 0.25
+#     nms_threshold = 0.15
+#     model = cv2.dnn_DetectionModel(net)
+#     model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
+#     return model, conf_threshold, nms_threshold
+
+# # ✅ Pothole Detection Function (Now Includes Confidence Score)
+# # def detect_potholes(img, model, conf_threshold, nms_threshold):
+# #     class_ids, scores, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+
+# #     for (class_id, score, box) in zip(class_ids, scores, boxes):
+# #         x, y, w, h = box
+# #         confidence = float(score)  # Convert score to float
+
+# #         # ✅ Bounding Box Color: Green
+# #         bbox_color = (0, 255, 0)  
+# #         thickness = 3  # Make bounding box thicker
+
+# #         # ✅ Draw Bounding Box
+# #         cv2.rectangle(img, (x, y), (x + w, y + h), bbox_color, thickness)
+
+# #         # ✅ Display Confidence Score
+# #         label = f"{confidence:.2f}"  # Format to 2 decimal places
+# #         font_scale = 1
+# #         font_thickness = 2
+# #         text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+
+# #         # ✅ Create Background for Text
+# #         text_x, text_y = x, y - 10
+# #         cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
+        
+# #         # ✅ Put Text on Image
+# #         cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)  # Black text
+    
+# #     return img
+
+# def detect_potholes(img, model, conf_threshold, nms_threshold):
+#     """
+#     Detect potholes and display confidence scores with green bounding boxes.
+#     """
+#     class_ids, scores, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+
+#     for (class_id, score, box) in zip(class_ids.flatten(), scores.flatten(), boxes):
+#         x, y, w, h = box.astype(int)
+#         confidence = float(score)  # Ensure confidence is a float
+
+#         # ✅ Bounding Box Color: Green
+#         bbox_color = (0, 255, 0)  
+#         thickness = 3  # Make bounding box thicker
+
+#         # ✅ Draw Bounding Box
+#         cv2.rectangle(img, (x, y), (x + w, y + h), bbox_color, thickness)
+
+#         # ✅ Display Confidence Score
+#         label = f"{confidence:.2f}"  # Format confidence to 2 decimal places
+#         font_scale = 1
+#         font_thickness = 2
+#         text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+
+#         # ✅ Create Background for Text
+#         text_x, text_y = x, max(y - 10, 20)  # Ensure text is within bounds
+#         cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), 
+#                       (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
+
+#         # ✅ Put Text on Image
+#         cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, 
+#                     font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)  # Black text
+    
+#     return img
+
+
+# # ✅ Streamlit UI
+# def main():
+#     st.set_page_config(page_title="Pothole Detection", layout="wide")
+#     st.title("🛣️ Pothole Detection System")
+
+#     model, conf_threshold, nms_threshold = load_model()
+
+#     uploaded_file = st.file_uploader("Choose an image or video...", type=["jpg", "png", "jpeg", "mp4"])
+    
+#     if uploaded_file is not None:
+#         is_video = uploaded_file.type.startswith('video/')
+
+#         if is_video:
+#             temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+#             temp_video.write(uploaded_file.read())
+#             temp_video_path = temp_video.name
+
+#             video = cv2.VideoCapture(temp_video_path)
+#             output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
+#             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+#             fps = int(video.get(cv2.CAP_PROP_FPS))
+#             frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+#             frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#             out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+
+#             progress_bar = st.progress(0)
+#             total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+#             frame_count = 0
+
+#             while True:
+#                 ret, frame = video.read()
+#                 if not ret:
+#                     break
+#                 detected_frame = detect_potholes(frame, model, conf_threshold, nms_threshold)
+#                 out.write(detected_frame)
+#                 frame_count += 1
+#                 progress_bar.progress(min(frame_count / total_frames, 1.0))
+
+#             video.release()
+#             out.release()
+
+#             st.success("✅ Video processing complete!")
+            
+#             # **Now Display the Video**
+#             st.video(output_video_path)  # Display processed video
+            
+#             # **Allow Download**
+#             with open(output_video_path, "rb") as file:
+#                 st.download_button("Download Processed Video", file, file_name="processed_video.mp4", mime="video/mp4")
+            
+#             os.remove(temp_video_path)
+#             os.remove(output_video_path)
+
+#         else:
+#             image = Image.open(uploaded_file)
+#             img_array = np.array(image)
+#             detected_img = detect_potholes(img_array, model, conf_threshold, nms_threshold)
+#             detected_pil = Image.fromarray(detected_img)
+
+#             col1, col2 = st.columns(2)
+#             with col1:
+#                 st.image(image, caption='Original Image', width=625)  # Set width
+#             with col2:
+#                 st.image(detected_pil, caption='Detected Potholes', width=625)  # Set width
+
+#             temp_image_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+#             detected_pil.save(temp_image_path)
+
+#             with open(temp_image_path, "rb") as file:
+#                 st.download_button("Download Processed Image", file, file_name="processed_image.png", mime="image/png")
+
+#             os.remove(temp_image_path)
+
+# if __name__ == "__main__":
+#     main()
+
 import streamlit as st
+import os
 import cv2
 import numpy as np
 from PIL import Image
 import tempfile
-import os
+
+# ✅ Increase Upload Limit to 1GB
+os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1024"  # 1GB limit
 
 # ✅ Load YOLO Model
 def load_model():
@@ -589,70 +749,32 @@ def load_model():
     model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
     return model, conf_threshold, nms_threshold
 
-# ✅ Pothole Detection Function (Now Includes Confidence Score)
-# def detect_potholes(img, model, conf_threshold, nms_threshold):
-#     class_ids, scores, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
-
-#     for (class_id, score, box) in zip(class_ids, scores, boxes):
-#         x, y, w, h = box
-#         confidence = float(score)  # Convert score to float
-
-#         # ✅ Bounding Box Color: Green
-#         bbox_color = (0, 255, 0)  
-#         thickness = 3  # Make bounding box thicker
-
-#         # ✅ Draw Bounding Box
-#         cv2.rectangle(img, (x, y), (x + w, y + h), bbox_color, thickness)
-
-#         # ✅ Display Confidence Score
-#         label = f"{confidence:.2f}"  # Format to 2 decimal places
-#         font_scale = 1
-#         font_thickness = 2
-#         text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
-
-#         # ✅ Create Background for Text
-#         text_x, text_y = x, y - 10
-#         cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
-        
-#         # ✅ Put Text on Image
-#         cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)  # Black text
-    
-#     return img
-
+# ✅ Pothole Detection Function
 def detect_potholes(img, model, conf_threshold, nms_threshold):
-    """
-    Detect potholes and display confidence scores with green bounding boxes.
-    """
     class_ids, scores, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
 
     for (class_id, score, box) in zip(class_ids.flatten(), scores.flatten(), boxes):
         x, y, w, h = box.astype(int)
-        confidence = float(score)  # Ensure confidence is a float
+        confidence = float(score)
 
-        # ✅ Bounding Box Color: Green
         bbox_color = (0, 255, 0)  
-        thickness = 3  # Make bounding box thicker
+        thickness = 3
 
-        # ✅ Draw Bounding Box
         cv2.rectangle(img, (x, y), (x + w, y + h), bbox_color, thickness)
-
-        # ✅ Display Confidence Score
-        label = f"{confidence:.2f}"  # Format confidence to 2 decimal places
+        
+        label = f"{confidence:.2f}"
         font_scale = 1
         font_thickness = 2
         text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
 
-        # ✅ Create Background for Text
-        text_x, text_y = x, max(y - 10, 20)  # Ensure text is within bounds
+        text_x, text_y = x, max(y - 10, 20)
         cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), 
                       (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
-
-        # ✅ Put Text on Image
+        
         cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, 
-                    font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)  # Black text
+                    font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
     
     return img
-
 
 # ✅ Streamlit UI
 def main():
@@ -661,18 +783,23 @@ def main():
 
     model, conf_threshold, nms_threshold = load_model()
 
-    uploaded_file = st.file_uploader("Choose an image or video...", type=["jpg", "png", "jpeg", "mp4"])
-    
+    # ✅ File Uploader With Increased File Size Handling
+    uploaded_file = st.file_uploader("Choose an image or video (Up to 1GB)...", type=["jpg", "png", "jpeg", "mp4"])
+
     if uploaded_file is not None:
+        temp_dir = tempfile.mkdtemp()  # ✅ Use Temp Directory
+        file_path = os.path.join(temp_dir, uploaded_file.name)
+
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.read())  # Save large files to disk instead of RAM
+
+        st.success(f"✅ File uploaded: {uploaded_file.name} (Size: {round(len(uploaded_file.getvalue()) / (1024*1024), 2)} MB)")
+
         is_video = uploaded_file.type.startswith('video/')
 
         if is_video:
-            temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-            temp_video.write(uploaded_file.read())
-            temp_video_path = temp_video.name
-
-            video = cv2.VideoCapture(temp_video_path)
-            output_video_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
+            video = cv2.VideoCapture(file_path)
+            output_video_path = os.path.join(temp_dir, "processed_video.mp4")
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             fps = int(video.get(cv2.CAP_PROP_FPS))
             frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -696,36 +823,28 @@ def main():
             out.release()
 
             st.success("✅ Video processing complete!")
-            
-            # **Now Display the Video**
-            st.video(output_video_path)  # Display processed video
-            
-            # **Allow Download**
+            st.video(output_video_path)
+
             with open(output_video_path, "rb") as file:
                 st.download_button("Download Processed Video", file, file_name="processed_video.mp4", mime="video/mp4")
-            
-            os.remove(temp_video_path)
-            os.remove(output_video_path)
 
         else:
-            image = Image.open(uploaded_file)
+            image = Image.open(file_path)
             img_array = np.array(image)
             detected_img = detect_potholes(img_array, model, conf_threshold, nms_threshold)
             detected_pil = Image.fromarray(detected_img)
 
             col1, col2 = st.columns(2)
             with col1:
-                st.image(image, caption='Original Image', width=625)  # Set width
+                st.image(image, caption='Original Image', width=625)
             with col2:
-                st.image(detected_pil, caption='Detected Potholes', width=625)  # Set width
+                st.image(detected_pil, caption='Detected Potholes', width=625)
 
-            temp_image_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
-            detected_pil.save(temp_image_path)
+            output_image_path = os.path.join(temp_dir, "processed_image.png")
+            detected_pil.save(output_image_path)
 
-            with open(temp_image_path, "rb") as file:
+            with open(output_image_path, "rb") as file:
                 st.download_button("Download Processed Image", file, file_name="processed_image.png", mime="image/png")
-
-            os.remove(temp_image_path)
 
 if __name__ == "__main__":
     main()
