@@ -850,6 +850,9 @@
 # if __name__ == "__main__":
 #     main()
 
+
+#File having no potholes resolve
+
 import streamlit as st
 import os
 import cv2
