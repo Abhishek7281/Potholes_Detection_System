@@ -873,19 +873,24 @@ def load_model():
 def detect_potholes(img, model, conf_threshold, nms_threshold):
     """
     Detect potholes and display confidence scores with green bounding boxes.
+    Ensures safety checks to prevent errors when no detections are found.
     """
+    # ✅ Run detection
     detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
 
-    # ✅ Check if detections are empty
-    if detections is None or len(detections) < 3:
+    # ✅ Check if the detections are valid before unpacking
+    if not detections or len(detections) != 3:
         return img  # Return original image if no detections
 
     class_ids, scores, boxes = detections
 
-    # ✅ Handle cases where no objects are detected
+    # ✅ Ensure class_ids, scores, and boxes are valid
     if class_ids is None or scores is None or boxes is None:
         return img
+    if len(class_ids) == 0 or len(scores) == 0 or len(boxes) == 0:
+        return img
 
+    # ✅ Process valid detections
     for (class_id, score, box) in zip(class_ids.flatten(), scores.flatten(), boxes):
         x, y, w, h = box.astype(int)
         confidence = float(score)
@@ -908,6 +913,7 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
                     font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
 
     return img
+
 
 # ✅ Streamlit UI
 def main():
