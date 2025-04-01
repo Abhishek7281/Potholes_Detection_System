@@ -1048,7 +1048,7 @@ def main():
         is_video = uploaded_file.type.startswith('video/')
         if is_video:
             video = cv2.VideoCapture(file_path)
-            output_video_path = os.path.join(temp_dir, "processed_video.mp4")
+            output_video_path = os.path.join(temp_dir, "detected_frames", "processed_video.mp4")
             frames_dir = os.path.join(temp_dir, "detected_frames/frames")
             os.makedirs(frames_dir, exist_ok=True)
             
