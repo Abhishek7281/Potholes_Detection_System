@@ -1000,7 +1000,6 @@ import cv2
 import numpy as np
 from PIL import Image
 import tempfile
-import shutil
 import zipfile
 import pandas as pd
 
@@ -1016,137 +1015,81 @@ def load_model():
     model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
     return model, conf_threshold, nms_threshold
 
-# ✅ Pothole Detection Function (Returns image & coordinates)
+# ✅ Pothole Detection Function
 def detect_potholes(img, model, conf_threshold, nms_threshold):
     detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
-
     if not detections or len(detections) != 3:
-        return img, []  # Return original image and empty list if no detections
-
+        return img, []
+    
     class_ids, scores, boxes = detections
-    detected_boxes = []  # Store detected coordinates
-
+    detected_boxes = []
     for (class_id, score, box) in zip(class_ids.flatten(), scores.flatten(), boxes):
         x, y, w, h = box.astype(int)
         confidence = float(score)
         detected_boxes.append((x, y, x + w, y + h, confidence))
-
-        bbox_color = (0, 255, 0)
-        thickness = 3
-        cv2.rectangle(img, (x, y), (x + w, y + h), bbox_color, thickness)
-
-        label = f"{confidence:.2f}"
-        font_scale = 1
-        font_thickness = 2
-        text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
-
-        text_x, text_y = x, max(y - 10, 20)
-        cv2.rectangle(img, (text_x, text_y - text_size[1] - 5), (text_x + text_size[0] + 10, text_y + 5), bbox_color, -1)
-        cv2.putText(img, label, (text_x + 5, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), font_thickness, cv2.LINE_AA)
-
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 3)
+        cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+    
     return img, detected_boxes
-
 
 # ✅ Streamlit UI
 def main():
     st.set_page_config(page_title="Pothole Detection", layout="wide")
     st.title("🛣️ Pothole Detection System")
-
     model, conf_threshold, nms_threshold = load_model()
-
     uploaded_file = st.file_uploader("Choose an image or video (Up to 1GB)...", type=["jpg", "png", "jpeg", "mp4"])
-
+    
     if uploaded_file is not None:
         temp_dir = tempfile.mkdtemp()
         file_path = os.path.join(temp_dir, uploaded_file.name)
-
         with open(file_path, "wb") as f:
             f.write(uploaded_file.read())
-
-        st.success(f"✅ File uploaded: {uploaded_file.name} (Size: {round(len(uploaded_file.getvalue()) / (1024*1024), 2)} MB)")
-
+        
         is_video = uploaded_file.type.startswith('video/')
-
         if is_video:
             video = cv2.VideoCapture(file_path)
             output_video_path = os.path.join(temp_dir, "processed_video.mp4")
-            frames_dir = os.path.join(temp_dir, "detected_frames")
+            frames_dir = os.path.join(temp_dir, "detected_frames/frames")
             os.makedirs(frames_dir, exist_ok=True)
-
+            
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             fps = int(video.get(cv2.CAP_PROP_FPS))
             frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
             frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
             out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
-
-            progress_bar = st.progress(0)
-            total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-            frame_count = 0
-
+            
             detection_data = []
-
             while True:
                 ret, frame = video.read()
                 if not ret:
                     break
-
+                
                 detected_frame, boxes = detect_potholes(frame, model, conf_threshold, nms_threshold)
                 out.write(detected_frame)
-
-                # ✅ Save detected frame
-                frame_filename = f"frame_{frame_count:04d}.png"
+                frame_filename = f"frame_{int(video.get(cv2.CAP_PROP_POS_FRAMES)):04d}.png"
                 frame_path = os.path.join(frames_dir, frame_filename)
                 cv2.imwrite(frame_path, detected_frame)
-
-                # ✅ Save detection data
+                
                 for (x1, y1, x2, y2, confidence) in boxes:
                     detection_data.append([frame_filename, x1, y1, x2, y2, confidence])
-
-                frame_count += 1
-                progress_bar.progress(min(frame_count / total_frames, 1.0))
-
+            
             video.release()
             out.release()
-
-            st.success("✅ Video processing complete!")
-            st.video(output_video_path)
-
-            # ✅ Save detection data as CSV
-            csv_path = os.path.join(frames_dir, "pothole_coordinates.csv")
+            
+            csv_path = os.path.join(temp_dir, "detected_frames", "pothole_coordinates.csv")
             df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence"])
             df.to_csv(csv_path, index=False)
-
-            # ✅ Zip detected frames & CSV
+            
             zip_path = os.path.join(temp_dir, "detected_frames.zip")
             with zipfile.ZipFile(zip_path, 'w') as zipf:
-                for root, _, files in os.walk(frames_dir):
+                for root, _, files in os.walk(os.path.join(temp_dir, "detected_frames")):
                     for file in files:
-                        zipf.write(os.path.join(root, file), arcname=file)
-
-            # ✅ Download buttons
-            with open(output_video_path, "rb") as file:
-                st.download_button("Download Processed Video", file, file_name="processed_video.mp4", mime="video/mp4")
-
+                        zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), temp_dir))
+            
+            st.video(output_video_path)
+            
             with open(zip_path, "rb") as file:
                 st.download_button("Download Detected Frames & Coordinates", file, file_name="detected_frames.zip", mime="application/zip")
-
-        else:
-            image = Image.open(file_path)
-            img_array = np.array(image)
-            detected_img, boxes = detect_potholes(img_array, model, conf_threshold, nms_threshold)
-            detected_pil = Image.fromarray(detected_img)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.image(image, caption='Original Image', width=625)
-            with col2:
-                st.image(detected_pil, caption='Detected Potholes', width=625)
-
-            output_image_path = os.path.join(temp_dir, "processed_image.png")
-            detected_pil.save(output_image_path)
-
-            with open(output_image_path, "rb") as file:
-                st.download_button("Download Processed Image", file, file_name="processed_image.png", mime="image/png")
 
 if __name__ == "__main__":
     main()
