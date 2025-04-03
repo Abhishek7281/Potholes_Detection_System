@@ -1250,7 +1250,6 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
     class_ids, confidences, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
 
     if len(class_ids) == 0:
-        # st.warning("⚠️ No potholes detected in this frame.")
         return img, []
 
     detected_boxes = []
@@ -1262,13 +1261,14 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
         if class_id == pothole_class_id:
             detected_boxes.append((x, y, x + w, y + h, float(confidence)))
 
-            # Draw bounding box
-            color = (0, 0, 255)  # Red for potholes
+            # Draw bounding box (Dark Blue)
+            color = (139, 0, 0)  # Dark Blue in BGR
             cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
+
+            # Draw confidence score in Dark Blue
             cv2.putText(img, f"Pothole {confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
     return img, detected_boxes
-
 # ✅ Streamlit UI
 def main():
     st.set_page_config(page_title="Pothole Detection", layout="wide")
