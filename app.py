@@ -1107,34 +1107,28 @@ import tempfile
 import zipfile
 import pandas as pd
 
-# ✅ Increase Upload Limit to 1GB
+# ✅ Increase Upload Limit
 os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1024"
 
 # ✅ Load YOLO Model
 def load_model():
     net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
     conf_threshold = 0.25
-    nms_threshold = 0.15
+    nms_threshold = 0.3
     model = cv2.dnn_DetectionModel(net)
     model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
     return model, conf_threshold, nms_threshold
 
 # ✅ Pothole Detection Function
 def detect_potholes(img, model, conf_threshold, nms_threshold):
-    detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
-    
-    if not detections or len(detections) != 2:  # Ensure correct number of outputs
-        return img, []
-    
-    class_ids, boxes = detections  # Unpack detections correctly
+    class_ids, confidences, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+
     detected_boxes = []
     
-    for (class_id, box) in zip(class_ids, boxes):
+    for class_id, confidence, box in zip(class_ids.flatten(), confidences.flatten(), boxes):
         x, y, w, h = map(int, box)
-        confidence = 0.5  # Default confidence if missing
-        
-        detected_boxes.append((x, y, x + w, y + h, confidence))
-        
+        detected_boxes.append((x, y, x + w, y + h, float(confidence)))
+
         color = (255, 0, 0)  # Blue for bounding box and confidence score
         cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
         cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
@@ -1152,7 +1146,7 @@ def main():
     uploaded_video = st.file_uploader("Choose a video (Up to 1GB)...", type=["mp4"])
     uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Mandatory)", type=["csv"])
 
-    process_button = st.button("Start Processing")  # Added Start button
+    process_button = st.button("Start Processing")
 
     if process_button and uploaded_video is not None and uploaded_gps is not None:
         temp_dir = tempfile.mkdtemp()
@@ -1175,6 +1169,9 @@ def main():
 
         detection_data = []
         frame_index = 0
+        total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        progress_bar = st.progress(0)
 
         while True:
             ret, frame = video.read()
@@ -1199,9 +1196,11 @@ def main():
 
             out.write(detected_frame)
             frame_index += 1
+            progress_bar.progress(frame_index / total_frames)
 
         video.release()
         out.release()
+        progress_bar.empty()
 
         excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
         df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"])
@@ -1216,8 +1215,8 @@ def main():
 
         with open(zip_path, "rb") as file:
             if st.download_button("Download All Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
-                st.session_state.clear()  # Clears session state (removes previous uploads)
-                st.rerun()  # Refresh UI after download
+                st.session_state.clear()
+                st.rerun()
 
 if __name__ == "__main__":
     main()
