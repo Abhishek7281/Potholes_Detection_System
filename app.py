@@ -1149,69 +1149,70 @@ def main():
     uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Mandatory)", type=["csv"])
     
     if uploaded_video is not None and uploaded_gps is not None:
-        temp_dir = tempfile.mkdtemp()
-        file_path = os.path.join(temp_dir, uploaded_video.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_video.read())
-        
-        gps_df = pd.read_csv(uploaded_gps)
-        
-        video = cv2.VideoCapture(file_path)
-        output_video_path = os.path.join(temp_dir, "processed_video.mp4")
-        frames_dir = os.path.join(temp_dir, "frames")
-        os.makedirs(frames_dir, exist_ok=True)
-        
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        fps = int(video.get(cv2.CAP_PROP_FPS))
-        frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
-        
-        detection_data = []
-        frame_index = 0
-        
-        while True:
-            ret, frame = video.read()
-            if not ret:
-                break
+        if st.button("Start Processing"):
+            temp_dir = tempfile.mkdtemp()
+            file_path = os.path.join(temp_dir, uploaded_video.name)
+            with open(file_path, "wb") as f:
+                f.write(uploaded_video.read())
             
-            detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
+            gps_df = pd.read_csv(uploaded_gps)
             
-            if boxes:
-                frame_filename = f"frame_{frame_index:04d}.png"
-                frame_path = os.path.join(frames_dir, frame_filename)
-                cv2.imwrite(frame_path, detected_frame)
+            video = cv2.VideoCapture(file_path)
+            output_video_path = os.path.join(temp_dir, "processed_video.mp4")
+            frames_dir = os.path.join(temp_dir, "frames")
+            os.makedirs(frames_dir, exist_ok=True)
+            
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fps = int(video.get(cv2.CAP_PROP_FPS))
+            frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+            frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+            
+            detection_data = []
+            frame_index = 0
+            
+            while True:
+                ret, frame = video.read()
+                if not ret:
+                    break
                 
-                if frame_index < len(gps_df):
-                    gps_row = gps_df.iloc[frame_index]
-                    latitude, longitude = gps_row['Latitude'], gps_row['Longitude']
-                else:
-                    latitude, longitude = None, None
+                detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
                 
-                for (x1, y1, x2, y2, confidence) in boxes:
-                    detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
+                if boxes:
+                    frame_filename = f"frame_{frame_index:04d}.png"
+                    frame_path = os.path.join(frames_dir, frame_filename)
+                    cv2.imwrite(frame_path, detected_frame)
+                    
+                    if frame_index < len(gps_df):
+                        gps_row = gps_df.iloc[frame_index]
+                        latitude, longitude = gps_row['Latitude'], gps_row['Longitude']
+                    else:
+                        latitude, longitude = None, None
+                    
+                    for (x1, y1, x2, y2, confidence) in boxes:
+                        detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
+                
+                out.write(detected_frame)
+                frame_index += 1
             
-            out.write(detected_frame)
-            frame_index += 1
-        
-        video.release()
-        out.release()
-        
-        excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
-        df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"])
-        df.to_excel(excel_path, index=False)
-        
-        zip_path = os.path.join(temp_dir, "processed_results.zip")
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            zipf.write(output_video_path, "processed_video.mp4")
-            zipf.write(excel_path, "pothole_coordinates.xlsx")
-            for frame in os.listdir(frames_dir):
-                zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
-        
-        with open(zip_path, "rb") as file:
-            if st.download_button("Download Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
-                st.session_state.clear()
-                st.rerun()
+            video.release()
+            out.release()
+            
+            excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
+            df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"])
+            df.to_excel(excel_path, index=False)
+            
+            zip_path = os.path.join(temp_dir, "processed_results.zip")
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                zipf.write(output_video_path, "processed_video.mp4")
+                zipf.write(excel_path, "pothole_coordinates.xlsx")
+                for frame in os.listdir(frames_dir):
+                    zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
+            
+            with open(zip_path, "rb") as file:
+                if st.download_button("Download All Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
+                    st.session_state.clear()
+                    st.rerun()
 
 if __name__ == "__main__":
     main()
