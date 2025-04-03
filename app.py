@@ -1248,16 +1248,17 @@ def load_model():
 def detect_potholes(img, model, conf_threshold, nms_threshold):
     detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
 
-    # Ensure detection output has the expected number of elements
-    if len(detections) != 3:
-        return img, []  # No valid detections
+    if not detections or len(detections) != 2:  # Ensure correct output shape
+        return img, []
 
-    class_ids, confidences, boxes = detections  # Correctly unpack detections
+    class_ids, boxes = detections  # Correctly unpack detections
     detected_boxes = []
 
-    for class_id, confidence, box in zip(class_ids.flatten(), confidences.flatten(), boxes):
+    for class_id, box in zip(class_ids, boxes):
         x, y, w, h = map(int, box)
-        detected_boxes.append((x, y, x + w, y + h, float(confidence)))
+        confidence = 0.5  # Assign a default confidence (YOLOv4 Tiny doesn’t return confidence)
+
+        detected_boxes.append((x, y, x + w, y + h, confidence))
 
         # Draw bounding box
         color = (255, 0, 0)  # Blue
