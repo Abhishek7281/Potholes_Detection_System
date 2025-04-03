@@ -1103,7 +1103,6 @@ import streamlit as st
 import os
 import cv2
 import numpy as np
-from PIL import Image
 import tempfile
 import zipfile
 import pandas as pd
@@ -1132,8 +1131,9 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
         x, y, w, h = box.astype(int)
         confidence = float(score)
         detected_boxes.append((x, y, x + w, y + h, confidence))
-        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 3)
-        cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+        color = (0, 0, 255) if confidence > 0.5 else (0, 255, 0)
+        cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
+        cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
     
     return img, detected_boxes
 
@@ -1145,63 +1145,52 @@ def main():
     if "model" not in st.session_state:
         st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold = load_model()
     
-    uploaded_file = st.file_uploader("Choose an image or video (Up to 1GB)...", type=["jpg", "png", "jpeg", "mp4"])
+    uploaded_video = st.file_uploader("Choose a video (Up to 1GB)...", type=["mp4"])
+    uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Optional)", type=["csv"])
     
-    if uploaded_file is not None:
+    if uploaded_video is not None:
         temp_dir = tempfile.mkdtemp()
-        file_path = os.path.join(temp_dir, uploaded_file.name)
+        file_path = os.path.join(temp_dir, uploaded_video.name)
         with open(file_path, "wb") as f:
-            f.write(uploaded_file.read())
+            f.write(uploaded_video.read())
         
-        is_video = uploaded_file.type.startswith('video/')
-        if is_video:
-            video = cv2.VideoCapture(file_path)
-            output_video_path = os.path.join(temp_dir, "processed_video.mp4")
-            frames_dir = os.path.join(temp_dir, "frames")
-            os.makedirs(frames_dir, exist_ok=True)
+        video = cv2.VideoCapture(file_path)
+        frames_dir = os.path.join(temp_dir, "frames")
+        os.makedirs(frames_dir, exist_ok=True)
+        
+        detection_data = []
+        
+        while True:
+            ret, frame = video.read()
+            if not ret:
+                break
             
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            fps = int(video.get(cv2.CAP_PROP_FPS))
-            frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+            detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
             
-            detection_data = []
-            
-            while True:
-                ret, frame = video.read()
-                if not ret:
-                    break
-                
-                detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
-                out.write(detected_frame)
+            if boxes:
                 frame_filename = f"frame_{int(video.get(cv2.CAP_PROP_POS_FRAMES)):04d}.png"
                 frame_path = os.path.join(frames_dir, frame_filename)
                 cv2.imwrite(frame_path, detected_frame)
                 
                 for (x1, y1, x2, y2, confidence) in boxes:
                     detection_data.append([frame_filename, x1, y1, x2, y2, confidence])
-            
-            video.release()
-            out.release()
-            
-            csv_path = os.path.join(temp_dir, "pothole_coordinates.csv")
-            df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence"])
-            df.to_csv(csv_path, index=False)
-            
-            zip_path = os.path.join(temp_dir, "processed_results.zip")
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                zipf.write(output_video_path, "processed_video.mp4")
-                zipf.write(csv_path, "pothole_coordinates.csv")
-                for frame in os.listdir(frames_dir):
-                    zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
-            
-            st.video(output_video_path)
-            
-            with open(zip_path, "rb") as file:
-                if st.download_button("Download Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
-                    st.session_state.clear()
-                    st.rerun()
+        
+        video.release()
+        
+        csv_path = os.path.join(temp_dir, "pothole_coordinates.csv")
+        df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence"])
+        df.to_csv(csv_path, index=False)
+        
+        zip_path = os.path.join(temp_dir, "processed_results.zip")
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            zipf.write(csv_path, "pothole_coordinates.csv")
+            for frame in os.listdir(frames_dir):
+                zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
+        
+        with open(zip_path, "rb") as file:
+            if st.download_button("Download Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
+                st.session_state.clear()
+                st.rerun()
 
 if __name__ == "__main__":
     main()
