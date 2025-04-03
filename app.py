@@ -1123,19 +1123,19 @@ def load_model():
 def detect_potholes(img, model, conf_threshold, nms_threshold):
     detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
     
-    if not detections or len(detections) != 2:  # It should return exactly two values
+    if not detections or len(detections) != 2:  # Ensure correct number of outputs
         return img, []
     
-    class_ids, boxes = detections  # YOLOv4 Tiny may not return scores separately
+    class_ids, boxes = detections  # Unpack detections correctly
     detected_boxes = []
     
     for (class_id, box) in zip(class_ids, boxes):
         x, y, w, h = map(int, box)
-        confidence = 0.5  # Default confidence if not returned
+        confidence = 0.5  # Default confidence if missing
         
         detected_boxes.append((x, y, x + w, y + h, confidence))
         
-        color = (255, 0, 0)  # Blue color for bounding box
+        color = (255, 0, 0)  # Blue for bounding box and confidence score
         cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
         cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
     
@@ -1145,78 +1145,79 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
 def main():
     st.set_page_config(page_title="Pothole Detection", layout="wide")
     st.title("🛣️ Pothole Detection System")
-    
+
     if "model" not in st.session_state:
         st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold = load_model()
-    
+
     uploaded_video = st.file_uploader("Choose a video (Up to 1GB)...", type=["mp4"])
     uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Mandatory)", type=["csv"])
-    
-    if uploaded_video is not None and uploaded_gps is not None:
-        if st.button("Start Processing"):
-            temp_dir = tempfile.mkdtemp()
-            file_path = os.path.join(temp_dir, uploaded_video.name)
-            with open(file_path, "wb") as f:
-                f.write(uploaded_video.read())
-            
-            gps_df = pd.read_csv(uploaded_gps)
-            
-            video = cv2.VideoCapture(file_path)
-            output_video_path = os.path.join(temp_dir, "processed_video.mp4")
-            frames_dir = os.path.join(temp_dir, "frames")
-            os.makedirs(frames_dir, exist_ok=True)
-            
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            fps = int(video.get(cv2.CAP_PROP_FPS))
-            frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
-            
-            detection_data = []
-            frame_index = 0
-            
-            while True:
-                ret, frame = video.read()
-                if not ret:
-                    break
-                
-                detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
-                
-                if boxes:
-                    frame_filename = f"frame_{frame_index:04d}.png"
-                    frame_path = os.path.join(frames_dir, frame_filename)
-                    cv2.imwrite(frame_path, detected_frame)
-                    
-                    if frame_index < len(gps_df):
-                        gps_row = gps_df.iloc[frame_index]
-                        latitude, longitude = gps_row['Latitude'], gps_row['Longitude']
-                    else:
-                        latitude, longitude = None, None
-                    
-                    for (x1, y1, x2, y2, confidence) in boxes:
-                        detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
-                
-                out.write(detected_frame)
-                frame_index += 1
-            
-            video.release()
-            out.release()
-            
-            excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
-            df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"])
-            df.to_excel(excel_path, index=False)
-            
-            zip_path = os.path.join(temp_dir, "processed_results.zip")
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                zipf.write(output_video_path, "processed_video.mp4")
-                zipf.write(excel_path, "pothole_coordinates.xlsx")
-                for frame in os.listdir(frames_dir):
-                    zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
-            
-            with open(zip_path, "rb") as file:
-                if st.download_button("Download All Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
-                    st.session_state.clear()
-                    st.rerun()
+
+    process_button = st.button("Start Processing")  # Added Start button
+
+    if process_button and uploaded_video is not None and uploaded_gps is not None:
+        temp_dir = tempfile.mkdtemp()
+        file_path = os.path.join(temp_dir, uploaded_video.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_video.read())
+
+        gps_df = pd.read_csv(uploaded_gps)
+
+        video = cv2.VideoCapture(file_path)
+        output_video_path = os.path.join(temp_dir, "processed_video.mp4")
+        frames_dir = os.path.join(temp_dir, "frames")
+        os.makedirs(frames_dir, exist_ok=True)
+
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fps = int(video.get(cv2.CAP_PROP_FPS))
+        frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+
+        detection_data = []
+        frame_index = 0
+
+        while True:
+            ret, frame = video.read()
+            if not ret:
+                break
+
+            detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
+
+            if boxes:
+                frame_filename = f"frame_{frame_index:04d}.png"
+                frame_path = os.path.join(frames_dir, frame_filename)
+                cv2.imwrite(frame_path, detected_frame)
+
+                if frame_index < len(gps_df):
+                    gps_row = gps_df.iloc[frame_index]
+                    latitude, longitude = gps_row['Latitude'], gps_row['Longitude']
+                else:
+                    latitude, longitude = None, None
+
+                for (x1, y1, x2, y2, confidence) in boxes:
+                    detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
+
+            out.write(detected_frame)
+            frame_index += 1
+
+        video.release()
+        out.release()
+
+        excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
+        df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"])
+        df.to_excel(excel_path, index=False)
+
+        zip_path = os.path.join(temp_dir, "processed_results.zip")
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            zipf.write(output_video_path, "processed_video.mp4")
+            zipf.write(excel_path, "pothole_coordinates.xlsx")
+            for frame in os.listdir(frames_dir):
+                zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
+
+        with open(zip_path, "rb") as file:
+            if st.download_button("Download All Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
+                st.session_state.clear()  # Clears session state (removes previous uploads)
+                st.rerun()  # Refresh UI after download
 
 if __name__ == "__main__":
     main()
