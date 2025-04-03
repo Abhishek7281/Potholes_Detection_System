@@ -1238,32 +1238,34 @@ os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1024"
 # ✅ Load YOLO Model
 def load_model():
     net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
-    conf_threshold = 0.25
-    nms_threshold = 0.15
+    conf_threshold = 0.25  # Adjust confidence threshold if needed
+    nms_threshold = 0.4  # Non-Maximum Suppression threshold
     model = cv2.dnn_DetectionModel(net)
     model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
     return model, conf_threshold, nms_threshold
 
 # ✅ Pothole Detection Function (Fixed)
 def detect_potholes(img, model, conf_threshold, nms_threshold):
-    detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+    # Perform YOLO detection
+    class_ids, confidences, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
 
-    if not detections or len(detections) != 2:  # Ensure correct output shape
+    if len(class_ids) == 0:
+        st.warning("⚠️ No potholes detected in this frame.")
         return img, []
 
-    class_ids, boxes = detections  # Correctly unpack detections
     detected_boxes = []
-
-    for class_id, box in zip(class_ids, boxes):
+    for class_id, confidence, box in zip(class_ids.flatten(), confidences.flatten(), boxes):
         x, y, w, h = map(int, box)
-        confidence = 0.5  # Assign a default confidence (YOLOv4 Tiny doesn’t return confidence)
+        
+        # Filter only pothole class (adjust based on your YOLO class labels)
+        pothole_class_id = 0  # Change this if potholes have a different ID in your dataset
+        if class_id == pothole_class_id:
+            detected_boxes.append((x, y, x + w, y + h, float(confidence)))
 
-        detected_boxes.append((x, y, x + w, y + h, confidence))
-
-        # Draw bounding box
-        color = (255, 0, 0)  # Blue
-        cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
-        cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+            # Draw bounding box
+            color = (0, 0, 255)  # Red for potholes
+            cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
+            cv2.putText(img, f"Pothole {confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
     return img, detected_boxes
 
