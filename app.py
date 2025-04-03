@@ -1122,16 +1122,20 @@ def load_model():
 # ✅ Pothole Detection Function
 def detect_potholes(img, model, conf_threshold, nms_threshold):
     detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
-    if not detections or len(detections) != 3:
+    
+    if not detections or len(detections) != 2:  # It should return exactly two values
         return img, []
     
-    class_ids, scores, boxes = detections
+    class_ids, boxes = detections  # YOLOv4 Tiny may not return scores separately
     detected_boxes = []
-    for (class_id, score, box) in zip(class_ids.flatten(), scores.flatten(), boxes):
-        x, y, w, h = box.astype(int)
-        confidence = float(score)
+    
+    for (class_id, box) in zip(class_ids, boxes):
+        x, y, w, h = map(int, box)
+        confidence = 0.5  # Default confidence if not returned
+        
         detected_boxes.append((x, y, x + w, y + h, confidence))
-        color = (255, 0, 0)  # Blue for bounding box and confidence score
+        
+        color = (255, 0, 0)  # Blue color for bounding box
         cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
         cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
     
