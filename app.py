@@ -1250,7 +1250,7 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
     class_ids, confidences, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
 
     if len(class_ids) == 0:
-        st.warning("⚠️ No potholes detected in this frame.")
+        # st.warning("⚠️ No potholes detected in this frame.")
         return img, []
 
     detected_boxes = []
