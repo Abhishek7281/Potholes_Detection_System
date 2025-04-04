@@ -1496,11 +1496,14 @@ def main():
             for frame in os.listdir(frames_dir):
                 zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
 
-        # ✅ Download Button
+        # ✅ Show Download Button after processing
+        st.success("✅ Processing complete!")
         with open(zip_path, "rb") as f:
-            st.success("✅ Processing complete!")
-            st.download_button("Download All Processed Data (ZIP)", f,
+            st.download_button("📦 Download All Processed Data (ZIP)", f,
                                file_name="processed_results.zip", mime="application/zip")
+
+        # ✅ Optional: Manual reset button
+        if st.button("🔁 Reset App"):
             st.session_state.clear()
             st.rerun()
 
