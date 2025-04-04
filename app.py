@@ -1277,7 +1277,7 @@ def main():
     if "model" not in st.session_state:
         st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold = load_model()
 
-    uploaded_video = st.file_uploader("Choose a video (Up to 1GB)...", type=["mp4"])
+    uploaded_video = st.file_uploader("Choose a video (Up to 1TB)...", type=["mp4"])
     uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Mandatory)", type=["csv"])
 
     process_button = st.button("Start Processing")  # Start button
