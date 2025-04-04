@@ -1387,8 +1387,7 @@ def detect_potholes(img, model, conf_threshold, nms_threshold):
     detected_boxes = []
     for class_id, confidence, box in zip(class_ids.flatten(), confidences.flatten(), boxes):
         x, y, w, h = map(int, box)
-        pothole_class_id = 0  # Change this if necessary
-        if class_id == pothole_class_id:
+        if class_id == 0:  # assuming class_id 0 = pothole
             detected_boxes.append((x, y, x + w, y + h, float(confidence)))
             color = (139, 0, 0)
             cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
@@ -1412,9 +1411,7 @@ def main():
 
     uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Mandatory)", type=["csv"])
 
-    process_button = st.button("Start Processing")
-
-    if process_button and uploaded_media and uploaded_gps:
+    if st.button("Start Processing") and uploaded_media and uploaded_gps:
         temp_dir = tempfile.mkdtemp()
         file_path = os.path.join(temp_dir, uploaded_media.name)
         with open(file_path, "wb") as f:
@@ -1442,22 +1439,12 @@ def main():
                 latitude, longitude = (gps_df.iloc[0]['Latitude'], gps_df.iloc[0]['Longitude']) if not gps_df.empty else (None, None)
                 for (x1, y1, x2, y2, confidence) in boxes:
                     detection_data.append(["frame_0000.png", x1, y1, x2, y2, confidence, latitude, longitude])
-
-            output_video_path = frame_path if boxes else None
         else:
             video = cv2.VideoCapture(file_path)
             total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = int(video.get(cv2.CAP_PROP_FPS))
-            width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            out_path = os.path.join(temp_dir, "processed_video.mp4")
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
-
             progress_bar = st.progress(0)
-            frame_index = 0
-            saved_frames = 0
 
+            frame_index = 0
             while True:
                 ret, frame = video.read()
                 if not ret:
@@ -1481,43 +1468,32 @@ def main():
                     for (x1, y1, x2, y2, confidence) in boxes:
                         detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
 
-                    out.write(detected_frame)
-                    saved_frames += 1
-
                 frame_index += 1
                 progress_bar.progress(min(frame_index / total_frames, 1.0))
 
             video.release()
-            out.release()
             progress_bar.empty()
 
-            output_video_path = out_path if saved_frames > 0 else None
-
         # ✅ Save Detection Data
-        excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
-        pd.DataFrame(detection_data, columns=[
-            "Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"
-        ]).to_excel(excel_path, index=False)
+        if detection_data:
+            excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
+            pd.DataFrame(detection_data, columns=[
+                "Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"
+            ]).to_excel(excel_path, index=False)
 
-        # ✅ ZIP All Results
-        zip_path = os.path.join(temp_dir, "processed_results.zip")
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            if output_video_path:
-                zipf.write(output_video_path, os.path.basename(output_video_path))
-            zipf.write(excel_path, "pothole_coordinates.xlsx")
-            for frame in os.listdir(frames_dir):
-                zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
+            # ✅ ZIP All Results
+            zip_path = os.path.join(temp_dir, "processed_results.zip")
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                zipf.write(excel_path, "pothole_coordinates.xlsx")
+                for frame in os.listdir(frames_dir):
+                    zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
 
-        # ✅ Download button
-        st.success("✅ Processing complete!")
-        with open(zip_path, "rb") as f:
-            st.download_button("📦 Download All Processed Data (ZIP)", f,
-                               file_name="processed_results.zip", mime="application/zip")
-
-        # ✅ Optional: Manual reset button
-        if st.button("🔁 Reset App"):
-            st.session_state.clear()
-            st.rerun()
+            st.success("✅ Processing complete!")
+            with open(zip_path, "rb") as f:
+                st.download_button("📦 Download All Processed Data (ZIP)", f,
+                                   file_name="processed_results.zip", mime="application/zip")
+        else:
+            st.warning("⚠️ No potholes detected. Nothing to download.")
 
 if __name__ == "__main__":
     main()
