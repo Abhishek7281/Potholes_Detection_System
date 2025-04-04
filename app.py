@@ -1381,14 +1381,13 @@ def load_model():
 # ✅ Detection Function
 def detect_potholes(img, model, conf_threshold, nms_threshold):
     class_ids, confidences, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
-
     if len(class_ids) == 0:
         return img, []
 
     detected_boxes = []
     for class_id, confidence, box in zip(class_ids.flatten(), confidences.flatten(), boxes):
         x, y, w, h = map(int, box)
-        pothole_class_id = 0  # Adjust if potholes use a different ID
+        pothole_class_id = 0  # Change this if necessary
         if class_id == pothole_class_id:
             detected_boxes.append((x, y, x + w, y + h, float(confidence)))
             color = (139, 0, 0)
@@ -1436,16 +1435,18 @@ def main():
                 st.session_state.nms_threshold
             )
 
-            frame_path = os.path.join(frames_dir, "frame_0000.png")
-            cv2.imwrite(frame_path, detected_frame)
+            if boxes:
+                frame_path = os.path.join(frames_dir, "frame_0000.png")
+                cv2.imwrite(frame_path, detected_frame)
 
-            latitude, longitude = (gps_df.iloc[0]['Latitude'], gps_df.iloc[0]['Longitude']) if not gps_df.empty else (None, None)
-            for (x1, y1, x2, y2, confidence) in boxes:
-                detection_data.append(["frame_0000.png", x1, y1, x2, y2, confidence, latitude, longitude])
+                latitude, longitude = (gps_df.iloc[0]['Latitude'], gps_df.iloc[0]['Longitude']) if not gps_df.empty else (None, None)
+                for (x1, y1, x2, y2, confidence) in boxes:
+                    detection_data.append(["frame_0000.png", x1, y1, x2, y2, confidence, latitude, longitude])
 
-            output_video_path = frame_path  # For consistency
+            output_video_path = frame_path if boxes else None
         else:
             video = cv2.VideoCapture(file_path)
+            total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = int(video.get(cv2.CAP_PROP_FPS))
             width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -1453,7 +1454,10 @@ def main():
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
 
+            progress_bar = st.progress(0)
             frame_index = 0
+            saved_frames = 0
+
             while True:
                 ret, frame = video.read()
                 if not ret:
@@ -1465,22 +1469,29 @@ def main():
                     st.session_state.nms_threshold
                 )
 
-                frame_filename = f"frame_{frame_index:04d}.png"
-                cv2.imwrite(os.path.join(frames_dir, frame_filename), detected_frame)
+                if boxes:
+                    frame_filename = f"frame_{frame_index:04d}.png"
+                    frame_path = os.path.join(frames_dir, frame_filename)
+                    cv2.imwrite(frame_path, detected_frame)
 
-                latitude, longitude = (None, None)
-                if frame_index < len(gps_df):
-                    latitude, longitude = gps_df.iloc[frame_index][['Latitude', 'Longitude']]
+                    latitude, longitude = (None, None)
+                    if frame_index < len(gps_df):
+                        latitude, longitude = gps_df.iloc[frame_index][['Latitude', 'Longitude']]
 
-                for (x1, y1, x2, y2, confidence) in boxes:
-                    detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
+                    for (x1, y1, x2, y2, confidence) in boxes:
+                        detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
 
-                out.write(detected_frame)
+                    out.write(detected_frame)
+                    saved_frames += 1
+
                 frame_index += 1
+                progress_bar.progress(min(frame_index / total_frames, 1.0))
 
             video.release()
             out.release()
-            output_video_path = out_path
+            progress_bar.empty()
+
+            output_video_path = out_path if saved_frames > 0 else None
 
         # ✅ Save Detection Data
         excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
@@ -1491,12 +1502,13 @@ def main():
         # ✅ ZIP All Results
         zip_path = os.path.join(temp_dir, "processed_results.zip")
         with zipfile.ZipFile(zip_path, 'w') as zipf:
-            zipf.write(output_video_path, os.path.basename(output_video_path))
+            if output_video_path:
+                zipf.write(output_video_path, os.path.basename(output_video_path))
             zipf.write(excel_path, "pothole_coordinates.xlsx")
             for frame in os.listdir(frames_dir):
                 zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
 
-        # ✅ Show Download Button after processing
+        # ✅ Download button
         st.success("✅ Processing complete!")
         with open(zip_path, "rb") as f:
             st.download_button("📦 Download All Processed Data (ZIP)", f,
