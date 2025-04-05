@@ -1099,131 +1099,238 @@
 
 
 # Working With gps coordinates
+# import streamlit as st
+# import os
+# import cv2
+# import numpy as np
+# import tempfile
+# import zipfile
+# import pandas as pd
+
+# # ✅ Increase Upload Limit
+# os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1024"
+
+# # ✅ Load YOLO Model
+# def load_model():
+#     net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
+#     conf_threshold = 0.25
+#     nms_threshold = 0.3
+#     model = cv2.dnn_DetectionModel(net)
+#     model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
+#     return model, conf_threshold, nms_threshold
+
+# # ✅ Pothole Detection Function
+# def detect_potholes(img, model, conf_threshold, nms_threshold):
+#     class_ids, confidences, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+
+#     detected_boxes = []
+    
+#     for class_id, confidence, box in zip(class_ids.flatten(), confidences.flatten(), boxes):
+#         x, y, w, h = map(int, box)
+#         detected_boxes.append((x, y, x + w, y + h, float(confidence)))
+
+#         color = (255, 0, 0)  # Blue for bounding box and confidence score
+#         cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
+#         cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+    
+#     return img, detected_boxes
+
+# # ✅ Streamlit UI
+# def main():
+#     st.set_page_config(page_title="Pothole Detection", layout="wide")
+#     st.title("🛣️ Pothole Detection System")
+
+#     if "model" not in st.session_state:
+#         st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold = load_model()
+
+#     uploaded_video = st.file_uploader("Choose a video (Up to 1GB)...", type=["mp4"])
+#     uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Mandatory)", type=["csv"])
+
+#     process_button = st.button("Start Processing")
+
+#     if process_button and uploaded_video is not None and uploaded_gps is not None:
+#         temp_dir = tempfile.mkdtemp()
+#         file_path = os.path.join(temp_dir, uploaded_video.name)
+#         with open(file_path, "wb") as f:
+#             f.write(uploaded_video.read())
+
+#         gps_df = pd.read_csv(uploaded_gps)
+
+#         video = cv2.VideoCapture(file_path)
+#         output_video_path = os.path.join(temp_dir, "processed_video.mp4")
+#         frames_dir = os.path.join(temp_dir, "frames")
+#         os.makedirs(frames_dir, exist_ok=True)
+
+#         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+#         fps = int(video.get(cv2.CAP_PROP_FPS))
+#         frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+#         frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#         out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+
+#         detection_data = []
+#         frame_index = 0
+#         total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+
+#         progress_bar = st.progress(0)
+
+#         while True:
+#             ret, frame = video.read()
+#             if not ret:
+#                 break
+
+#             detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
+
+#             if boxes:
+#                 frame_filename = f"frame_{frame_index:04d}.png"
+#                 frame_path = os.path.join(frames_dir, frame_filename)
+#                 cv2.imwrite(frame_path, detected_frame)
+
+#                 if frame_index < len(gps_df):
+#                     gps_row = gps_df.iloc[frame_index]
+#                     latitude, longitude = gps_row['Latitude'], gps_row['Longitude']
+#                 else:
+#                     latitude, longitude = None, None
+
+#                 for (x1, y1, x2, y2, confidence) in boxes:
+#                     detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
+
+#             out.write(detected_frame)
+#             frame_index += 1
+#             progress_bar.progress(frame_index / total_frames)
+
+#         video.release()
+#         out.release()
+#         progress_bar.empty()
+
+#         excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
+#         df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"])
+#         df.to_excel(excel_path, index=False)
+
+#         zip_path = os.path.join(temp_dir, "processed_results.zip")
+#         with zipfile.ZipFile(zip_path, 'w') as zipf:
+#             zipf.write(output_video_path, "processed_video.mp4")
+#             zipf.write(excel_path, "pothole_coordinates.xlsx")
+#             for frame in os.listdir(frames_dir):
+#                 zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
+
+#         with open(zip_path, "rb") as file:
+#             if st.download_button("Download All Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
+#                 st.session_state.clear()
+#                 st.rerun()
+
+# if __name__ == "__main__":
+#     main()
+
+
+
 import streamlit as st
 import os
 import cv2
-import numpy as np
 import tempfile
+from ultralytics import YOLO
+from PIL import Image
+import numpy as np
+from datetime import timedelta
 import zipfile
-import pandas as pd
+import time
 
-# ✅ Increase Upload Limit
-os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1024"
+# Load the YOLO model
+model = YOLO("best.pt")
 
-# ✅ Load YOLO Model
-def load_model():
-    net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
-    conf_threshold = 0.25
-    nms_threshold = 0.3
-    model = cv2.dnn_DetectionModel(net)
-    model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
-    return model, conf_threshold, nms_threshold
+# Function to process videos
+def process_video(video_path, output_dir):
+    cap = cv2.VideoCapture(video_path)
 
-# ✅ Pothole Detection Function
-def detect_potholes(img, model, conf_threshold, nms_threshold):
-    class_ids, confidences, boxes = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+    # Get the total frame count and fps for progress and ETA calculation
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    detected_boxes = []
-    
-    for class_id, confidence, box in zip(class_ids.flatten(), confidences.flatten(), boxes):
-        x, y, w, h = map(int, box)
-        detected_boxes.append((x, y, x + w, y + h, float(confidence)))
+    # Define codec and create VideoWriter object
+    output_path = os.path.join(output_dir, os.path.basename(video_path))
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-        color = (255, 0, 0)  # Blue for bounding box and confidence score
-        cv2.rectangle(img, (x, y), (x + w, y + h), color, 3)
-        cv2.putText(img, f"{confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-    
-    return img, detected_boxes
+    frame_count = 0
+    start_time = time.time()
 
-# ✅ Streamlit UI
-def main():
-    st.set_page_config(page_title="Pothole Detection", layout="wide")
-    st.title("🛣️ Pothole Detection System")
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    if "model" not in st.session_state:
-        st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold = load_model()
+        results = model(frame, verbose=False)
+        annotated_frame = results[0].plot()
 
-    uploaded_video = st.file_uploader("Choose a video (Up to 1GB)...", type=["mp4"])
-    uploaded_gps = st.file_uploader("Upload GPS Coordinates CSV (Mandatory)", type=["csv"])
+        out.write(annotated_frame)
+        frame_count += 1
 
-    process_button = st.button("Start Processing")
+        # Calculate and show progress
+        elapsed_time = time.time() - start_time
+        fps_processing = frame_count / elapsed_time if elapsed_time > 0 else 0
+        frames_left = total_frames - frame_count
+        eta = timedelta(seconds=int(frames_left / fps_processing)) if fps_processing > 0 else timedelta(seconds=0)
 
-    if process_button and uploaded_video is not None and uploaded_gps is not None:
-        temp_dir = tempfile.mkdtemp()
-        file_path = os.path.join(temp_dir, uploaded_video.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_video.read())
+        progress = frame_count / total_frames
+        progress_text = f"Processing {os.path.basename(video_path)}: {progress * 100:.2f}% complete - ETA: {eta}"
+        progress_bar.progress(progress, text=progress_text)
 
-        gps_df = pd.read_csv(uploaded_gps)
+    cap.release()
+    out.release()
 
-        video = cv2.VideoCapture(file_path)
-        output_video_path = os.path.join(temp_dir, "processed_video.mp4")
-        frames_dir = os.path.join(temp_dir, "frames")
-        os.makedirs(frames_dir, exist_ok=True)
+    return output_path
 
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        fps = int(video.get(cv2.CAP_PROP_FPS))
-        frame_width = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
+# Streamlit app
+st.title("Video Processing with YOLOv8 🚀")
 
-        detection_data = []
-        frame_index = 0
-        total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+uploaded_videos = st.file_uploader("Upload multiple videos", type=["mp4", "mov", "avi"], accept_multiple_files=True)
 
-        progress_bar = st.progress(0)
+if uploaded_videos:
+    with tempfile.TemporaryDirectory() as tmp_input_dir, tempfile.TemporaryDirectory() as tmp_output_dir:
 
-        while True:
-            ret, frame = video.read()
-            if not ret:
-                break
+        # Save uploaded videos temporarily
+        input_video_paths = []
+        for uploaded_video in uploaded_videos:
+            input_video_path = os.path.join(tmp_input_dir, uploaded_video.name)
+            with open(input_video_path, "wb") as f:
+                f.write(uploaded_video.getbuffer())
+            input_video_paths.append(input_video_path)
 
-            detected_frame, boxes = detect_potholes(frame, st.session_state.model, st.session_state.conf_threshold, st.session_state.nms_threshold)
+        # Prepare progress bar
+        progress_bar = st.progress(0, text="Starting processing...")
 
-            if boxes:
-                frame_filename = f"frame_{frame_index:04d}.png"
-                frame_path = os.path.join(frames_dir, frame_filename)
-                cv2.imwrite(frame_path, detected_frame)
+        processed_video_paths = []
+        for input_video_path in input_video_paths:
+            processed_video_path = process_video(input_video_path, tmp_output_dir)
+            processed_video_paths.append(processed_video_path)
 
-                if frame_index < len(gps_df):
-                    gps_row = gps_df.iloc[frame_index]
-                    latitude, longitude = gps_row['Latitude'], gps_row['Longitude']
-                else:
-                    latitude, longitude = None, None
+            # Display processed video preview
+            st.video(processed_video_path)
 
-                for (x1, y1, x2, y2, confidence) in boxes:
-                    detection_data.append([frame_filename, x1, y1, x2, y2, confidence, latitude, longitude])
-
-            out.write(detected_frame)
-            frame_index += 1
-            progress_bar.progress(frame_index / total_frames)
-
-        video.release()
-        out.release()
-        progress_bar.empty()
-
-        excel_path = os.path.join(temp_dir, "pothole_coordinates.xlsx")
-        df = pd.DataFrame(detection_data, columns=["Frame", "X1", "Y1", "X2", "Y2", "Confidence", "Latitude", "Longitude"])
-        df.to_excel(excel_path, index=False)
-
-        zip_path = os.path.join(temp_dir, "processed_results.zip")
+        # Create a ZIP file of all processed videos
+        zip_path = os.path.join(tmp_output_dir, "processed_videos.zip")
         with zipfile.ZipFile(zip_path, 'w') as zipf:
-            zipf.write(output_video_path, "processed_video.mp4")
-            zipf.write(excel_path, "pothole_coordinates.xlsx")
-            for frame in os.listdir(frames_dir):
-                zipf.write(os.path.join(frames_dir, frame), os.path.join("frames", frame))
+            for video_path in processed_video_paths:
+                zipf.write(video_path, os.path.basename(video_path))
 
-        with open(zip_path, "rb") as file:
-            if st.download_button("Download All Processed Data (ZIP)", file, file_name="processed_results.zip", mime="application/zip"):
-                st.session_state.clear()
-                st.rerun()
+        # Provide download button for the ZIP
+        with open(zip_path, "rb") as f:
+            st.download_button(
+                label="Download All Processed Videos as ZIP",
+                data=f,
+                file_name="processed_videos.zip",
+                mime="application/zip"
+            )
 
-if __name__ == "__main__":
-    main()
+        progress_bar.empty()
+        st.success("All videos processed and ZIP file is ready for download!")
 
 
+        
 
-# working1
+
+# working1 (original)
 # import streamlit as st
 # import os
 # import cv2
