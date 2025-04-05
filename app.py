@@ -1223,146 +1223,100 @@
 
 
 
-import streamlit as st
 import cv2
-import numpy as np
-import tempfile
-import zipfile
-import pandas as pd
-import time
-from datetime import timedelta
 import os
+import pandas as pd
+import zipfile
+import tempfile
+from tqdm import tqdm
 
-def detect_potholes(img, boxes, scores):
-    for box, score in zip(boxes, scores):
-        x, y, w, h = box.astype(int)
-        confidence = float(score)
+def load_model():
+    net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
+    conf_threshold = 0.25
+    nms_threshold = 0.3
+    model = cv2.dnn_DetectionModel(net)
+    model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
+    return model, conf_threshold, nms_threshold
 
-        # Draw bounding box
-        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 3)
+# Initialize model
+model, conf_threshold, nms_threshold = load_model()
 
-        # Put confidence text safely (fixing numpy formatting issue)
-        cv2.putText(img, f"{confidence:.2f}", (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+def detect_potholes(frame, model, conf_threshold, nms_threshold):
+    classes, scores, boxes = model.detect(frame, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+    pothole_boxes = []
+    if len(classes) > 0:
+        for class_id, score, box in zip(classes.flatten(), scores.flatten(), boxes):
+            if class_id == 0:  # Assuming 'pothole' class id is 0
+                pothole_boxes.append(box)
+                x, y, w, h = box
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(frame, f'Pothole: {score:.2f}', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    return frame, pothole_boxes
 
-    return img
-
-def process_video(video_path, gps_data, output_folder):
+def process_video(video_path, gps_data_path, output_dir):
     cap = cv2.VideoCapture(video_path)
+    gps_data = pd.read_csv(gps_data_path)
 
-    if not cap.isOpened():
-        st.error("Error opening video file.")
-        return None, None
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
+
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Prepare output video
-    output_video_path = os.path.join(output_folder, "processed_video.mp4")
+    output_video_path = os.path.join(output_dir, "processed_video.mp4")
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
-    detected_frames_folder = os.path.join(output_folder, "detected_frames")
-    os.makedirs(detected_frames_folder, exist_ok=True)
+    pothole_frames_dir = os.path.join(output_dir, "pothole_frames")
+    os.makedirs(pothole_frames_dir, exist_ok=True)
 
-    frame_count = 0
-    start_time = time.time()
+    detected_potholes = []
 
-    gps_index = 0
-    detected_gps = []
-
-    while cap.isOpened():
+    for frame_num in tqdm(range(frame_count), desc="Processing Video"):
         ret, frame = cap.read()
         if not ret:
             break
 
-        # Dummy pothole detection data
-        # Replace with your model's actual prediction
-        boxes = np.array([[100, 100, 50, 50]])  # x, y, width, height
-        scores = np.array([0.9])  # confidence scores
+        frame, pothole_boxes = detect_potholes(frame, model, conf_threshold, nms_threshold)
 
-        # Draw boxes and confidence
-        processed_frame = detect_potholes(frame.copy(), boxes, scores)
-        out.write(processed_frame)
+        if pothole_boxes:
+            timestamp = frame_num / fps
+            gps_row = gps_data.iloc[min(int(timestamp), len(gps_data) - 1)]
 
-        # Save detected frames
-        if gps_index < len(gps_data):
-            frame_filename = os.path.join(detected_frames_folder, f"frame_{frame_count}.jpg")
-            cv2.imwrite(frame_filename, processed_frame)
+            pothole_info = {
+                "frame": frame_num,
+                "timestamp": timestamp,
+                "latitude": gps_row['latitude'],
+                "longitude": gps_row['longitude'],
+                "boxes": pothole_boxes
+            }
+            detected_potholes.append(pothole_info)
 
-            # Save GPS data
-            gps_entry = gps_data.iloc[gps_index]
-            detected_gps.append({
-                "frame": frame_count,
-                "latitude": gps_entry['latitude'],
-                "longitude": gps_entry['longitude']
-            })
-            gps_index += 1
+            pothole_frame_path = os.path.join(pothole_frames_dir, f"frame_{frame_num}.jpg")
+            cv2.imwrite(pothole_frame_path, frame)
 
-        # Progress and ETA
-        frame_count += 1
-        elapsed_time = time.time() - start_time
-        frames_left = total_frames - frame_count
-        fps_processing = frame_count / elapsed_time if elapsed_time > 0 else 1
-        eta = timedelta(seconds=int(frames_left / fps_processing))
-
-        progress = frame_count / total_frames
-        st.progress(progress)
-        st.write(f"Processing frame {frame_count}/{total_frames} - ETA: {eta}")
+        out.write(frame)
 
     cap.release()
     out.release()
 
-    # Save detected GPS data
-    gps_csv_path = os.path.join(output_folder, "detected_gps.csv")
-    pd.DataFrame(detected_gps).to_csv(gps_csv_path, index=False)
+    detected_potholes_df = pd.DataFrame(detected_potholes)
+    detected_potholes_csv = os.path.join(output_dir, "detected_potholes.csv")
+    detected_potholes_df.to_csv(detected_potholes_csv, index=False)
 
-    return output_video_path, gps_csv_path
-
-def create_zip(output_folder, output_video_path, gps_csv_path):
-    zip_path = os.path.join(output_folder, "results.zip")
-    with zipfile.ZipFile(zip_path, 'w') as zipf:
-        zipf.write(output_video_path, os.path.basename(output_video_path))
-        zipf.write(gps_csv_path, os.path.basename(gps_csv_path))
-        detected_frames_folder = os.path.join(output_folder, "detected_frames")
-        for root, _, files in os.walk(detected_frames_folder):
+    zip_filename = os.path.join(output_dir, "results.zip")
+    with zipfile.ZipFile(zip_filename, 'w') as zipf:
+        zipf.write(output_video_path, arcname="processed_video.mp4")
+        zipf.write(detected_potholes_csv, arcname="detected_potholes.csv")
+        for root, dirs, files in os.walk(pothole_frames_dir):
             for file in files:
-                zipf.write(os.path.join(root, file),
-                           os.path.join("detected_frames", file))
-    return zip_path
+                zipf.write(os.path.join(root, file), arcname=os.path.join("pothole_frames", file))
 
-def main():
-    st.title("Pothole Detection System with GPS Upload")
+    return zip_filename
 
-    video_file = st.file_uploader("Upload Video", type=["mp4", "avi", "mov"])
-    gps_file = st.file_uploader("Upload GPS Coordinates File (CSV)", type=["csv"])
+# Example usage:
+# process_video("path_to_video.mp4", "path_to_gps.csv", "output_directory")
 
-    if video_file and gps_file:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            video_path = os.path.join(tmp_dir, video_file.name)
-            gps_path = os.path.join(tmp_dir, gps_file.name)
-
-            with open(video_path, "wb") as f:
-                f.write(video_file.read())
-
-            with open(gps_path, "wb") as f:
-                f.write(gps_file.read())
-
-            gps_data = pd.read_csv(gps_path)
-
-            st.write("Starting video processing...")
-            output_video_path, gps_csv_path = process_video(video_path, gps_data, tmp_dir)
-
-            if output_video_path and gps_csv_path:
-                zip_path = create_zip(tmp_dir, output_video_path, gps_csv_path)
-
-                with open(zip_path, "rb") as f:
-                    st.download_button("Download Results as ZIP", f, file_name="results.zip")
-
-if __name__ == "__main__":
-    main()
 
 
 
