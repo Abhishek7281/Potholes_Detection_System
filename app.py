@@ -1227,27 +1227,47 @@ import streamlit as st
 import os
 import cv2
 import tempfile
-from ultralytics import YOLO
-from PIL import Image
-import numpy as np
 from datetime import timedelta
 import zipfile
 import time
 
-# Load the YOLO model
-model = YOLO("best.pt")
+# ✅ Increase Upload Limit to 1GB
+os.environ["STREAMLIT_SERVER_MAX_UPLOAD_SIZE"] = "1024"
 
-# Function to process videos
-def process_video(video_path, output_dir):
+# ✅ Load YOLOv4-tiny Model
+def load_model():
+    net = cv2.dnn.readNet("project_files/yolov4_tiny.weights", "project_files/yolov4_tiny.cfg")
+    conf_threshold = 0.25
+    nms_threshold = 0.15
+    model = cv2.dnn_DetectionModel(net)
+    model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
+    return model, conf_threshold, nms_threshold
+
+# ✅ Pothole Detection Function
+def detect_potholes(img, model, conf_threshold, nms_threshold):
+    detections = model.detect(img, confThreshold=conf_threshold, nmsThreshold=nms_threshold)
+    if not detections or len(detections) != 3:
+        return img
+
+    class_ids, scores, boxes = detections
+    for (class_id, score, box) in zip(class_ids.flatten(), scores.flatten(), boxes):
+        x, y, w, h = box.astype(int)
+        confidence = float(score)
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 3)
+        cv2.putText(img, f"{confidence:.2f}", (x, y - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+
+    return img
+
+# ✅ Video Processing Function
+def process_video(video_path, output_dir, model, conf_threshold, nms_threshold):
     cap = cv2.VideoCapture(video_path)
 
-    # Get the total frame count and fps for progress and ETA calculation
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Define codec and create VideoWriter object
     output_path = os.path.join(output_dir, os.path.basename(video_path))
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
@@ -1260,13 +1280,12 @@ def process_video(video_path, output_dir):
         if not ret:
             break
 
-        results = model(frame, verbose=False)
-        annotated_frame = results[0].plot()
+        detected_frame = detect_potholes(frame, model, conf_threshold, nms_threshold)
+        out.write(detected_frame)
 
-        out.write(annotated_frame)
         frame_count += 1
 
-        # Calculate and show progress
+        # Progress and ETA calculation
         elapsed_time = time.time() - start_time
         fps_processing = frame_count / elapsed_time if elapsed_time > 0 else 0
         frames_left = total_frames - frame_count
@@ -1281,50 +1300,57 @@ def process_video(video_path, output_dir):
 
     return output_path
 
-# Streamlit app
-st.title("Video Processing with YOLOv8 🚀")
+# ✅ Streamlit App
+def main():
+    st.set_page_config(page_title="🛣️ Pothole Detection System", layout="wide")
+    st.title("🛣️ Pothole Detection System with Multiple Video Upload 🚗")
 
-uploaded_videos = st.file_uploader("Upload multiple videos", type=["mp4", "mov", "avi"], accept_multiple_files=True)
+    model, conf_threshold, nms_threshold = load_model()
 
-if uploaded_videos:
-    with tempfile.TemporaryDirectory() as tmp_input_dir, tempfile.TemporaryDirectory() as tmp_output_dir:
+    uploaded_videos = st.file_uploader("Upload multiple videos (Up to 1GB each)", type=["mp4", "mov", "avi"], accept_multiple_files=True)
 
-        # Save uploaded videos temporarily
-        input_video_paths = []
-        for uploaded_video in uploaded_videos:
-            input_video_path = os.path.join(tmp_input_dir, uploaded_video.name)
-            with open(input_video_path, "wb") as f:
-                f.write(uploaded_video.getbuffer())
-            input_video_paths.append(input_video_path)
+    if uploaded_videos:
+        with tempfile.TemporaryDirectory() as tmp_input_dir, tempfile.TemporaryDirectory() as tmp_output_dir:
+            # Save uploaded videos temporarily
+            input_video_paths = []
+            for uploaded_video in uploaded_videos:
+                input_video_path = os.path.join(tmp_input_dir, uploaded_video.name)
+                with open(input_video_path, "wb") as f:
+                    f.write(uploaded_video.read())
+                input_video_paths.append(input_video_path)
 
-        # Prepare progress bar
-        progress_bar = st.progress(0, text="Starting processing...")
+            # Prepare progress bar
+            global progress_bar
+            progress_bar = st.progress(0, text="Starting processing...")
 
-        processed_video_paths = []
-        for input_video_path in input_video_paths:
-            processed_video_path = process_video(input_video_path, tmp_output_dir)
-            processed_video_paths.append(processed_video_path)
+            processed_video_paths = []
+            for input_video_path in input_video_paths:
+                processed_video_path = process_video(input_video_path, tmp_output_dir, model, conf_threshold, nms_threshold)
+                processed_video_paths.append(processed_video_path)
 
-            # Display processed video preview
-            st.video(processed_video_path)
+                # Display processed video preview
+                st.video(processed_video_path)
 
-        # Create a ZIP file of all processed videos
-        zip_path = os.path.join(tmp_output_dir, "processed_videos.zip")
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            for video_path in processed_video_paths:
-                zipf.write(video_path, os.path.basename(video_path))
+            # Create ZIP of processed videos
+            zip_path = os.path.join(tmp_output_dir, "processed_videos.zip")
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                for video_path in processed_video_paths:
+                    zipf.write(video_path, os.path.basename(video_path))
 
-        # Provide download button for the ZIP
-        with open(zip_path, "rb") as f:
-            st.download_button(
-                label="Download All Processed Videos as ZIP",
-                data=f,
-                file_name="processed_videos.zip",
-                mime="application/zip"
-            )
+            # Download button for ZIP
+            with open(zip_path, "rb") as f:
+                st.download_button(
+                    label="Download All Processed Videos as ZIP",
+                    data=f,
+                    file_name="processed_videos.zip",
+                    mime="application/zip"
+                )
 
-        progress_bar.empty()
-        st.success("All videos processed and ZIP file is ready for download!")
+            progress_bar.empty()
+            st.success("✅ All videos processed and ZIP file is ready for download!")
+
+if __name__ == "__main__":
+    main()
 
 
         
