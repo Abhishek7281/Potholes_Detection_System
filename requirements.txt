@@ -1,17 +1,43 @@
+#streamlit
+#streamlit-webrtc==0.34.2
+#gunicorn
+#numpy<2.0
+#opencv-python-headless==4.5.1.48
+#opencv-python-headless>=4.8.0
+#Pillow
+#joblib
+#openpyxl
+#folium 
+#streamlit-folium
+#branca
+#torch
+#scipy
+
+# Core dependencies
 streamlit
 streamlit-webrtc==0.34.2
 gunicorn
+
+# Numerical and image processing
 numpy<2.0
 opencv-python-headless==4.5.1.48
-#opencv-python-headless>=4.8.0
 Pillow
+scipy
 joblib
 openpyxl
-folium 
+
+# Mapping and visualization
+folium
 streamlit-folium
 branca
-torch
-scipy
+
+# PyTorch (CPU version only)
+torch==2.1.0+cpu
+
+# Needed for torch +cpu builds
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+
 #ultralytics
 
 # streamlit
