@@ -1591,8 +1591,8 @@ def main():
     st.set_page_config(page_title="YOLOv4 Pothole Detection", layout="wide")
     st.title("🛣️ YOLOv4 Pothole Detection with Mapping")
 
-    cfg_path = st.text_input("YOLOv4 Config Path", "project_files/yolov4.cfg")
-    weights_path = st.text_input("YOLOv4 Weights Path", "project_files/yolov4.weights")
+    cfg_path = st.text_input("YOLOv4 Config Path", "project_files/yolov4_tiny.cfg")
+    weights_path = st.text_input("YOLOv4 Weights Path", "project_files/yolov4_tiny.weights")
     classes_path = st.text_input("YOLOv4 Classes Path", "project_files/obj.names")
 
     uploaded_video = st.file_uploader("Upload Video", type=["mp4"])
