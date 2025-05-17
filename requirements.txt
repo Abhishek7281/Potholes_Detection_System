@@ -7,6 +7,10 @@ opencv-python-headless==4.5.1.48
 Pillow
 joblib
 openpyxl
+folium 
+streamlit-folium
+branca
+torch
 #ultralytics
 
 # streamlit
