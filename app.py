@@ -1593,7 +1593,7 @@ def main():
 
     cfg_path = st.text_input("YOLOv4 Config Path", "project_files/yolov4.cfg")
     weights_path = st.text_input("YOLOv4 Weights Path", "project_files/yolov4.weights")
-    classes_path = st.text_input("YOLOv4 Classes Path", "project_files/coco.names")
+    classes_path = st.text_input("YOLOv4 Classes Path", "project_files/obj.names")
 
     uploaded_video = st.file_uploader("Upload Video", type=["mp4"])
     uploaded_gps = st.file_uploader("Upload GPS CSV", type=["csv"])
