@@ -1453,7 +1453,8 @@
 # if __name__ == "__main__":
 #     main()
 
-# YOLOv4-based Pothole Detection with Unique Count, Map, and Export
+
+# YOLOv4-based Pothole Detection Streamlit App (CPU-safe, Clean UI)
 import streamlit as st
 import cv2
 import os
@@ -1461,14 +1462,19 @@ import numpy as np
 import pandas as pd
 import tempfile
 import zipfile
-import torch
+import shutil
 from PIL import Image
 from scipy.spatial.distance import euclidean
 from folium.plugins import HeatMap
 import folium
 from streamlit_folium import st_folium
 
-# Load YOLOv4 model using OpenCV
+# Paths to YOLOv4 files (hardcoded)
+CFG_PATH = "project_files/yolov4_tiny.cfg"
+WEIGHTS_PATH = "project_files/yolov4_tiny.weights"
+CLASSES_PATH = "project_files/obj.names"
+
+# Load YOLOv4 model
 def load_yolov4_model(cfg_path, weights_path, classes_path):
     net = cv2.dnn.readNet(weights_path, cfg_path)
     layer_names = net.getLayerNames()
@@ -1476,8 +1482,6 @@ def load_yolov4_model(cfg_path, weights_path, classes_path):
     with open(classes_path, "r") as f:
         classes = [line.strip() for line in f.readlines()]
     return net, output_layers, classes
-
-# Detect potholes in frame
 
 def detect_potholes(frame, net, output_layers, confidence_threshold=0.5):
     height, width = frame.shape[:2]
@@ -1502,8 +1506,6 @@ def detect_potholes(frame, net, output_layers, confidence_threshold=0.5):
                 cv2.putText(frame, f"{confidence:.2f}", (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     return frame, pothole_data
 
-# Helper
-
 def compute_centroid(x1, y1, x2, y2):
     return ((x1 + x2) / 2, (y1 + y2) / 2)
 
@@ -1514,8 +1516,6 @@ def merge_gps_data(pothole_data, gps_data, frame_index):
         for x1, y1, x2, y2, confidence in pothole_data:
             merged_data.append([frame_index, gps_lat, gps_lon, x1, y1, x2, y2, confidence])
     return merged_data
-
-# Process
 
 def process_video(video_path, gps_data, net, output_layers, temp_dir, progress_bar):
     cap = cv2.VideoCapture(video_path)
@@ -1536,10 +1536,8 @@ def process_video(video_path, gps_data, net, output_layers, temp_dir, progress_b
         ret, frame = cap.read()
         if not ret:
             break
-
         frame, detections = detect_potholes(frame, net, output_layers)
         out.write(frame)
-
         merged = merge_gps_data(detections, gps_data, frame_index)
         pothole_results.extend(merged)
 
@@ -1566,11 +1564,10 @@ def process_video(video_path, gps_data, net, output_layers, temp_dir, progress_b
     df_all = pd.DataFrame(pothole_results, columns=["Frame", "Latitude", "Longitude", "X1", "Y1", "X2", "Y2", "Confidence"])
     df_all.to_csv(os.path.join(temp_dir, "all_potholes.csv"), index=False)
     df_unique = pd.DataFrame(unique_potholes, columns=["Frame", "Latitude", "Longitude", "X1", "Y1", "X2", "Y2", "Confidence"])
-    df_unique.to_csv(os.path.join(temp_dir, "unique_potholes.csv"), index=False)
+    unique_csv_path = os.path.join(temp_dir, "unique_potholes.csv")
+    df_unique.to_csv(unique_csv_path, index=False)
 
-    return out_path, gps_points, os.path.join(temp_dir, "unique_potholes.csv")
-
-# Map
+    return out_path, gps_points, unique_csv_path
 
 def create_map(gps_points, heatmap=False):
     if not gps_points:
@@ -1585,133 +1582,268 @@ def create_map(gps_points, heatmap=False):
             folium.Marker([lat, lon], icon=folium.Icon(color='red')).add_to(m)
     return m
 
-# Main App
-
 def main():
     st.set_page_config(page_title="YOLOv4 Pothole Detection", layout="wide")
     st.title("🛣️ YOLOv4 Pothole Detection with Mapping")
 
-    # Hardcoded YOLOv4 model paths
-    cfg_path = "project_files/yolov4_tiny.cfg"
-    weights_path = "project_files/yolov4_tiny.weights"
-    classes_path = "project_files/obj.names"
-
     uploaded_video = st.file_uploader("Upload Video", type=["mp4"])
     uploaded_gps = st.file_uploader("Upload GPS CSV", type=["csv"])
 
-    if uploaded_video and uploaded_gps:
-        if st.button("Start Processing"):
-            temp_dir = tempfile.mkdtemp()
-            video_path = os.path.join(temp_dir, uploaded_video.name)
-            gps_path = os.path.join(temp_dir, uploaded_gps.name)
+    if uploaded_video and uploaded_gps and st.button("Start Processing"):
+        temp_dir = tempfile.mkdtemp()
+        video_path = os.path.join(temp_dir, uploaded_video.name)
+        gps_path = os.path.join(temp_dir, uploaded_gps.name)
 
-            with open(video_path, 'wb') as f:
-                f.write(uploaded_video.read())
-            with open(gps_path, 'wb') as f:
-                f.write(uploaded_gps.read())
+        with open(video_path, 'wb') as f:
+            f.write(uploaded_video.read())
+        with open(gps_path, 'wb') as f:
+            f.write(uploaded_gps.read())
 
-            gps_data = pd.read_csv(gps_path)
-            net, output_layers, _ = load_yolov4_model(cfg_path, weights_path, classes_path)
+        gps_data = pd.read_csv(gps_path)
+        net, output_layers, _ = load_yolov4_model(CFG_PATH, WEIGHTS_PATH, CLASSES_PATH)
 
-            st.subheader("Processing...")
-            progress_bar = st.progress(0)
+        st.subheader("Processing...")
+        progress_bar = st.progress(0)
+        output_video, gps_points, unique_csv_path = process_video(video_path, gps_data, net, output_layers, temp_dir, progress_bar)
 
-            output_video, gps_points, unique_csv_path = process_video(video_path, gps_data, net, output_layers, temp_dir, progress_bar)
+        # Copy video to static folder for safe playback
+        os.makedirs("static", exist_ok=True)
+        permanent_path = os.path.join("static", "processed_video.mp4")
+        shutil.copy(output_video, permanent_path)
 
-            zip_path = os.path.join(temp_dir, "results.zip")
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                zipf.write(output_video, arcname="processed_video.mp4")
-                zipf.write(unique_csv_path, arcname="unique_potholes.csv")
+        zip_path = os.path.join(temp_dir, "results.zip")
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            zipf.write(output_video, arcname="processed_video.mp4")
+            zipf.write(unique_csv_path, arcname="unique_potholes.csv")
 
-            st.success("✅ Processing complete!")
+        st.success("✅ Processing complete!")
+        st.subheader("🎥 Processed Video")
+        st.video(permanent_path)
 
-            st.subheader("🎥 Processed Video")
-            with open(output_video, "rb") as f:
-                st.video(f.read())
+        st.info(f"🕳️ Unique Potholes Detected: {len(gps_points)}")
 
-            st.info(f"🕳️ Unique Potholes Detected: {len(gps_points)}")
+        st.subheader("🗺️ Pothole Maps")
+        col1, col2 = st.columns(2)
 
-            st.subheader("🗺️ Pothole Maps")
-            col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**📍 Marker Map**")
+            map1 = create_map(gps_points, heatmap=False)
+            if map1:
+                st_folium(map1, width=600, height=450)
 
-            with col1:
-                st.markdown("**📍 Marker Map**")
-                map1 = create_map(gps_points, heatmap=False)
-                if map1:
-                    st_folium(map1, width=600, height=450)
+        with col2:
+            st.markdown("**🔥 Heatmap**")
+            map2 = create_map(gps_points, heatmap=True)
+            if map2:
+                st_folium(map2, width=600, height=450)
 
-            with col2:
-                st.markdown("**🔥 Heatmap**")
-                map2 = create_map(gps_points, heatmap=True)
-                if map2:
-                    st_folium(map2, width=600, height=450)
+        st.subheader("📥 Download")
+        with open(zip_path, "rb") as z:
+            st.download_button("Download ZIP", z, file_name="results.zip", mime="application/zip")
 
-            st.subheader("📥 Download")
-            with open(zip_path, "rb") as z:
-                st.download_button("Download ZIP", z, file_name="results.zip", mime="application/zip")
+if __name__ == "__main__":
+    main()
+
+# # YOLOv4-based Pothole Detection with Unique Count, Map, and Export
+# import streamlit as st
+# import cv2
+# import os
+# import numpy as np
+# import pandas as pd
+# import tempfile
+# import zipfile
+# import torch
+# from PIL import Image
+# from scipy.spatial.distance import euclidean
+# from folium.plugins import HeatMap
+# import folium
+# from streamlit_folium import st_folium
+
+# # Load YOLOv4 model using OpenCV
+# def load_yolov4_model(cfg_path, weights_path, classes_path):
+#     net = cv2.dnn.readNet(weights_path, cfg_path)
+#     layer_names = net.getLayerNames()
+#     output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+#     with open(classes_path, "r") as f:
+#         classes = [line.strip() for line in f.readlines()]
+#     return net, output_layers, classes
+
+# # Detect potholes in frame
+
+# def detect_potholes(frame, net, output_layers, confidence_threshold=0.5):
+#     height, width = frame.shape[:2]
+#     blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
+#     net.setInput(blob)
+#     outputs = net.forward(output_layers)
+
+#     pothole_data = []
+#     for output in outputs:
+#         for detection in output:
+#             scores = detection[5:]
+#             class_id = np.argmax(scores)
+#             confidence = scores[class_id]
+#             if confidence > confidence_threshold:
+#                 center_x, center_y, w, h = (detection[0:4] * np.array([width, height, width, height])).astype('int')
+#                 x1 = int(center_x - w / 2)
+#                 y1 = int(center_y - h / 2)
+#                 x2 = x1 + int(w)
+#                 y2 = y1 + int(h)
+#                 pothole_data.append([x1, y1, x2, y2, float(confidence)])
+#                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#                 cv2.putText(frame, f"{confidence:.2f}", (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+#     return frame, pothole_data
+
+# # Helper
+
+# def compute_centroid(x1, y1, x2, y2):
+#     return ((x1 + x2) / 2, (y1 + y2) / 2)
+
+# def merge_gps_data(pothole_data, gps_data, frame_index):
+#     merged_data = []
+#     if not gps_data.empty and frame_index < len(gps_data):
+#         gps_lat, gps_lon = gps_data.iloc[frame_index][['Latitude', 'Longitude']]
+#         for x1, y1, x2, y2, confidence in pothole_data:
+#             merged_data.append([frame_index, gps_lat, gps_lon, x1, y1, x2, y2, confidence])
+#     return merged_data
+
+# # Process
+
+# def process_video(video_path, gps_data, net, output_layers, temp_dir, progress_bar):
+#     cap = cv2.VideoCapture(video_path)
+#     fps = int(cap.get(cv2.CAP_PROP_FPS))
+#     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+#     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+#     out_path = os.path.join(temp_dir, "processed_video.mp4")
+#     out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+
+#     frame_index = 0
+#     pothole_results = []
+#     unique_potholes = []
+#     unique_centroids = []
+#     gps_points = []
+
+#     while True:
+#         ret, frame = cap.read()
+#         if not ret:
+#             break
+
+#         frame, detections = detect_potholes(frame, net, output_layers)
+#         out.write(frame)
+
+#         merged = merge_gps_data(detections, gps_data, frame_index)
+#         pothole_results.extend(merged)
+
+#         for item in merged:
+#             lat, lon = item[1], item[2]
+#             centroid = compute_centroid(item[3], item[4], item[5], item[6])
+#             latlon = (lat, lon)
+#             is_unique = True
+#             for existing in unique_centroids:
+#                 if euclidean(latlon, existing) < 0.0002:
+#                     is_unique = False
+#                     break
+#             if is_unique:
+#                 unique_potholes.append(item)
+#                 unique_centroids.append(latlon)
+#                 gps_points.append(latlon)
+
+#         frame_index += 1
+#         progress_bar.progress(frame_index / total_frames)
+
+#     cap.release()
+#     out.release()
+
+#     df_all = pd.DataFrame(pothole_results, columns=["Frame", "Latitude", "Longitude", "X1", "Y1", "X2", "Y2", "Confidence"])
+#     df_all.to_csv(os.path.join(temp_dir, "all_potholes.csv"), index=False)
+#     df_unique = pd.DataFrame(unique_potholes, columns=["Frame", "Latitude", "Longitude", "X1", "Y1", "X2", "Y2", "Confidence"])
+#     df_unique.to_csv(os.path.join(temp_dir, "unique_potholes.csv"), index=False)
+
+#     return out_path, gps_points, os.path.join(temp_dir, "unique_potholes.csv")
+
+# # Map
+
+# def create_map(gps_points, heatmap=False):
+#     if not gps_points:
+#         return None
+#     avg_lat = np.mean([pt[0] for pt in gps_points])
+#     avg_lon = np.mean([pt[1] for pt in gps_points])
+#     m = folium.Map(location=[avg_lat, avg_lon], zoom_start=16)
+#     if heatmap:
+#         HeatMap(gps_points).add_to(m)
+#     else:
+#         for lat, lon in gps_points:
+#             folium.Marker([lat, lon], icon=folium.Icon(color='red')).add_to(m)
+#     return m
+
+# # Main App
 
 # def main():
 #     st.set_page_config(page_title="YOLOv4 Pothole Detection", layout="wide")
 #     st.title("🛣️ YOLOv4 Pothole Detection with Mapping")
 
-#     cfg_path = st.text_input("YOLOv4 Config Path", "project_files/yolov4_tiny.cfg")
-#     weights_path = st.text_input("YOLOv4 Weights Path", "project_files/yolov4_tiny.weights")
-#     classes_path = st.text_input("YOLOv4 Classes Path", "project_files/obj.names")
+#     # Hardcoded YOLOv4 model paths
+#     cfg_path = "project_files/yolov4_tiny.cfg"
+#     weights_path = "project_files/yolov4_tiny.weights"
+#     classes_path = "project_files/obj.names"
 
 #     uploaded_video = st.file_uploader("Upload Video", type=["mp4"])
 #     uploaded_gps = st.file_uploader("Upload GPS CSV", type=["csv"])
 
-#     if uploaded_video and uploaded_gps and st.button("Start Processing"):
-#         temp_dir = tempfile.mkdtemp()
-#         video_path = os.path.join(temp_dir, uploaded_video.name)
-#         gps_path = os.path.join(temp_dir, uploaded_gps.name)
+#     if uploaded_video and uploaded_gps:
+#         if st.button("Start Processing"):
+#             temp_dir = tempfile.mkdtemp()
+#             video_path = os.path.join(temp_dir, uploaded_video.name)
+#             gps_path = os.path.join(temp_dir, uploaded_gps.name)
 
-#         with open(video_path, 'wb') as f:
-#             f.write(uploaded_video.read())
-#         with open(gps_path, 'wb') as f:
-#             f.write(uploaded_gps.read())
+#             with open(video_path, 'wb') as f:
+#                 f.write(uploaded_video.read())
+#             with open(gps_path, 'wb') as f:
+#                 f.write(uploaded_gps.read())
 
-#         gps_data = pd.read_csv(gps_path)
-#         net, output_layers, _ = load_yolov4_model(cfg_path, weights_path, classes_path)
+#             gps_data = pd.read_csv(gps_path)
+#             net, output_layers, _ = load_yolov4_model(cfg_path, weights_path, classes_path)
 
-#         st.subheader("Processing...")
-#         progress_bar = st.progress(0)
+#             st.subheader("Processing...")
+#             progress_bar = st.progress(0)
 
-#         output_video, gps_points, unique_csv_path = process_video(video_path, gps_data, net, output_layers, temp_dir, progress_bar)
+#             output_video, gps_points, unique_csv_path = process_video(video_path, gps_data, net, output_layers, temp_dir, progress_bar)
 
-#         zip_path = os.path.join(temp_dir, "results.zip")
-#         with zipfile.ZipFile(zip_path, 'w') as zipf:
-#             zipf.write(output_video, arcname="processed_video.mp4")
-#             zipf.write(unique_csv_path, arcname="unique_potholes.csv")
+#             zip_path = os.path.join(temp_dir, "results.zip")
+#             with zipfile.ZipFile(zip_path, 'w') as zipf:
+#                 zipf.write(output_video, arcname="processed_video.mp4")
+#                 zipf.write(unique_csv_path, arcname="unique_potholes.csv")
 
-#         st.success("✅ Processing complete!")
-#         st.subheader("🎥 Processed Video")
-#         with open(output_video, "rb") as f:
-#             st.video(f.read())
+#             st.success("✅ Processing complete!")
 
-#         st.info(f"🕳️ Unique Potholes Detected: {len(gps_points)}")
+#             st.subheader("🎥 Processed Video")
+#             with open(output_video, "rb") as f:
+#                 st.video(f.read())
 
-#         st.subheader("🗺️ Pothole Maps")
-#         col1, col2 = st.columns(2)
+#             st.info(f"🕳️ Unique Potholes Detected: {len(gps_points)}")
 
-#         with col1:
-#             st.markdown("**📍 Marker Map**")
-#             map1 = create_map(gps_points, heatmap=False)
-#             if map1:
-#                 st_folium(map1, width=600, height=450)
+#             st.subheader("🗺️ Pothole Maps")
+#             col1, col2 = st.columns(2)
 
-#         with col2:
-#             st.markdown("**🔥 Heatmap**")
-#             map2 = create_map(gps_points, heatmap=True)
-#             if map2:
-#                 st_folium(map2, width=600, height=450)
+#             with col1:
+#                 st.markdown("**📍 Marker Map**")
+#                 map1 = create_map(gps_points, heatmap=False)
+#                 if map1:
+#                     st_folium(map1, width=600, height=450)
 
-#         st.subheader("📥 Download")
-#         with open(zip_path, "rb") as z:
-#             st.download_button("Download ZIP", z, file_name="results.zip", mime="application/zip")
+#             with col2:
+#                 st.markdown("**🔥 Heatmap**")
+#                 map2 = create_map(gps_points, heatmap=True)
+#                 if map2:
+#                     st_folium(map2, width=600, height=450)
 
-if __name__ == "__main__":
-    main()
+#             st.subheader("📥 Download")
+#             with open(zip_path, "rb") as z:
+#                 st.download_button("Download ZIP", z, file_name="results.zip", mime="application/zip")
+
+
+# if __name__ == "__main__":
+#     main()
 
 
 
