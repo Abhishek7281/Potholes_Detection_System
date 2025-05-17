@@ -11,6 +11,7 @@ folium
 streamlit-folium
 branca
 torch
+scipy
 #ultralytics
 
 # streamlit
